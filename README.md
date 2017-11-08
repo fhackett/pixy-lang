@@ -14,7 +14,7 @@ Pixy's goal is to take the declarative syntax and expressive semantics introduce
 This introduces some constraints to the language:
 - It is unacceptable for an expression's evaluation to implicitly require unbounded amounts of memory
 - The core language should not require any runtime library code
-- Programmers should only need to makea minimum of assumptions about concurrency or lack thereof when designing algorithms
+- Programmers should only need to make a minimum of assumptions about concurrency or lack thereof when designing algorithms
 - Typechecking should make it hard or ideally impossible to compile demonstrably malformed programs (i.e deadlocks, bad accesses)
 
 ## Current language issues
