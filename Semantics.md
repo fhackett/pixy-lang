@@ -13,7 +13,7 @@ a Pixy program in order to produce next states.
 
 ## Constants
 
-Any constant in Pixy is defined as the literal <Constant, 1>. It always has a value
+Any constant in Pixy is defined as the literal `<Constant, 1>`. It always has a value
 and that value does not change, so it can be used as a compile-time constant.
 
 ## next
