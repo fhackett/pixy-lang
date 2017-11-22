@@ -69,12 +69,25 @@ asa(x, y) = if y then x else nil fi
     Now that we have isolated tail-call recursion as a separate concept, this leaves us with the issue of how to allow the programmer to explicitly deal with different degrees of unbounded or partly-bounded space requirements. The current idea in this situation is to introduce a special operator with special typing rules that both allows runtime memory allocation and makes clear that it is happening.
     
     \section{Typing and verification}
+
+    We propose a typing scheme for Pixy that attempts to eliminate 2 classes of errors: value compatibility, and 
+    temporal compatibility. One of the biggest issues we have forseen is the synchronisation of streams that produce at different rates.
+    The solution that we propose is to block a stream until its current value is "consumed", upon which it will compute it's next value.
+    However, this presents its own problem: namely, that the computation will be chock full of race conditions.
+    To solve this problem, we propose building a type system on top of linear logic, which allows us to guarantee that once a stream element 
+    has been used, we are safe to discard it and proceed to the next value of the stream.
     
-    Thoughts so far:
+    Specifically, we propose using a Linear Type System, which ensures that every value of the stream is used \textbf{exactly} once.
+    This means that we can guarantee that a stream will never deadlock waiting for a value to be consumed when it never will, and also
+    allows us to deallocate once the value is consumed, which allows us to ensure that a program can have an upper bound on memory usage.
+
+    This approach has the nice property that it avoids buffering entirely, and allows for synchronisation of streams with non-deterministic production rates
+    (IO streams, etc).
+    % Thoughts so far:
     
-    - temporal types
+    % - temporal types
     
-    - session types
+    % - session types
     
     \section{Deliverables}
     

@@ -3,5 +3,9 @@
 *.log
 *.pdf
 *.toc
+*.dvi
+*fdb_latexmk
+*.fls
+*.ilg
+*.ind
 *.synctex.gz
-
