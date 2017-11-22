@@ -1,6 +1,10 @@
 \documentclass{scrartcl}
 
 \usepackage{listings}
+\usepackage{tabularx}
+\usepackage{ragged2e}
+
+\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X} 
 
 \makeindex
 
@@ -18,65 +22,107 @@
     \tableofcontents
 
     \section{Introduction}
-    
+
     Lucid is a dataflow programming language that was developed throughout the 70s and 80s with the goal of expressing complex algorithms in clear, mathematically coherent statements. Unlike other approaches to this problem which are based on the lambda calculus and are centered around function definition and application, Lucid based itself on an infinitary algebra, allowing programmers to directly define streams of data and freeing them from many of the constraints of functional or imperative evaluation.
-    
+
     Derivative work has taken Lucid in various directions, one significant one being Lucid's apparent suitability for fine-grained concurrency and realtime systems. Two cases in particular are SISAL and RLucid which considered fine-grained concurrency and adaptations of Lucid to realtime computation respectively.
-    
+
     Our interest is in attempting to improve on RLucid's achievements with a focus on runtime-less compilation and instruction-level parallelism, while retaining a language expressive enough to support general-purpose software development via libraries.
-    
+
     Specifically, we hope to investigate the following:
     \begin{enumerate}
         \item Modifications to the language semantics such that programs can be guaranteed to run with a constant memory footprint, unless it is specifically and clearly chosen otherwise
         \item Typechecking Lucid expressions in the context of the fine-grained asynchrony that is inherent to Lucid semantics
         \item Compilation strategies that support both of the above
     \end{enumerate}
-    
+
     \section{Evaluation semantics}
-    
+
     Our proposed approach to Pixy's evaluation semantics is based on some alternate perspectives on how Lucid can be evaluated. The usual explanation for how Lucid is evaluated involves dataflow graphs and on-demand semantics, but this does not map well to modern computer architectures.
-    
+
     We instead propose to view Lucid's existing semantics as state machine definitions, where state is an assignment to all the variables in the current context and there exists a stepping function that advances from one state to the next, emulating Lucid's timesteps.
-    
+
     \subsection{Asynchrony}
-    
+
     This approach already raises an obvious issue: how do we deal with asynchrony? Originally, Lucid approached the issue by buffering the connections between dataflow elements, but this is not very useful since in the general case it is impossible to predict an adequate buffer size.
-    
+
     Our approach splits asynchrony into two cases: the incoming stream is "too slow", or the incoming stream is "too fast".
-    
-    First, if the incoming stream is "too slow" the function to advance the state will run and one of the variables will not have a value. This is a common occurrence, as maybe in some cases it will take more than once computational step to yield a value. A trivial example is the naive evaluation of $\textbf{next}\ 1$. At time 0, this expression has no value. It must wait until time 1, at which time and forever onward it will have the value $1$. Since this case is so common, Pixy semantics will simply have to deal with it. As such, all types in Pixy can have the value $\textbf{nil}$. This is similar to hiatons as described in the Pixy book.
-    
+
+    First, if the incoming stream is "too slow" the function to advance the state will run and one of the variables will not have a value. This is a common occurrence, as maybe in some cases it will take more than once computational step to yield a value. A trivial example is the naive evaluation of $\textbf{next}\ 1$. At time 0, this expression has no value. It must wait until time 1, at which time and forever onward it will have the value $1$. Since this case is so common, Pixy semantics will simply have to deal with it. As such, values Pixy can have the value $\textbf{nil}$. This is similar to hiatons as described in the Lucid book.
+
     The second case is a little more complex in that in all discrete computing we assume events cannot occur more often than once very timestep. The issue is that if we are waiting for a value to occur due to a dependency being "too slow", other dependencies may yield values faster. This requires special synchronisation of some kind, as to our knowledge no general constant-space approach to this situation can exist.
-    
+
+    \subsection{Synchronisation}
+
+    In the context of managing asynchrony, while we do not propose any general automatic approaches we suggest that all one would need to manage asynchrony is general control flow, \textbf{nil} and the $?$ operator. We've talked about \textbf{nil} before, but $?$ merits definition.
+
+    Informally speaking, $?$ is a unary operator that yields a boolean. Its operand can be a stream of any type, and it yields booleans. It yields \textbf{true} if the stream it is given has a value at the current timestep, and false if it does not.
+
+    To demonstrate a simple special-purpose synchronisation primitive one can write with these primitives, here is how one might express a latch that simply repeats the last value it received at every timestep, updating it whenever it receives a new one.
+
+    \begin{lstlisting}
+latch(src) = accumulator where
+    accumulator = if ?src then src else accumulator fi;
+end
+    \end{lstlisting}
+
+    Similar strategies could be used to implement Lucid's original buffering strategy. The following definition synchronises srcA and srcB, yielding whenever it has a pair of values available. While it could use a dynamically growing buffer, here we use a statically sized buffer of size N for simplicity. We assume the buffers implement the queue abstract data type with traditional functions available.
+    \footnote{see Appendix \ref{app:queueops} for reference}
+
+    \begin{lstlisting}
+buffer(srcA, srcB) = (syncA, syncB) where
+    haveValues = !emptyQueue(queueA) && !emptyQueue(queueB);
+    manageQueue(queue, input) = (queuePushed, poppedValue) where
+        (queuePopped, poppedValue) = if haveValues then
+                popFromQueue(queue)
+            else
+                (queue, nil)
+            fi;
+        queuePushed = if ?input && !fullQueue(queuePopped) then
+                -- discard input if queue is full, could also
+                -- increase queue size if depending on application
+                -- requirements
+                pushToQueue(queuePopped, input)
+            else
+                queuePopped
+            fi;
+    end;
+    (queueA, syncA) = (makeQueue(N), nil) fby
+        manageQueue(queueA, srcA);
+    (queueB, syncB) = (makeQueue(N), nul) fby
+        manageQueue(queueB, srcB);
+end
+    \end{lstlisting}
+
     \subsection{Constant memory}
-    
+
     The second main issue in our implementation of Lucid as a state machine is recursion. What passes for a function in Lucid is not really a function - these are really coroutines that can have internal state and have an unbounded lifetime.
-    
+
     Typically, low-level languages deal function calls by allocating local variables on the stack, but in the context of Pixy this is not workable. It is possible for multiple invocations of Lucid functions to begin and end concurrently, which does not seem to have a reasonable general solution. Our current approach is to reduce the power of Pixy's functions. As in functional programming, the only kind of recursion that is possible to do with constant memory consumption is tail recursion.
-    
+
     Let us take an example from the Lucid book, a definition of operator asa that uses tail recursion.
     \begin{lstlisting}
 asa(x, y) = if first y then first x else
             asa(next x, next y) fi
     \end{lstlisting}
-    
+
     If we removed recursion from the language entirely this definition would not work along with many other things. From our previous comments on asynchrony however Pixy has a constant \textbf{nil} which it turns out is analoguous to tail-call recursion. As an example, asa can be rewritten like this:
     \footnote{It is worth noting that this translation to Pixy is not entirely what it seems as it assumes synchrony between $x$ and $y$.}
     \begin{lstlisting}
 asa(x, y) = if y then x else nil fi
     \end{lstlisting}
-    
+
     Now that we have isolated tail-call recursion as a separate concept, this leaves us with the issue of how to allow the programmer to explicitly deal with different degrees of unbounded or partly-bounded space requirements. The current idea in this situation is to introduce a special operator with special typing rules that both allows runtime memory allocation and makes clear that it is happening.
-    
+
     \section{Typing and verification}
 
     We propose a typing scheme for Pixy that attempts to eliminate 2 classes of errors: value compatibility, and 
     temporal compatibility. One of the biggest issues we have forseen is the synchronisation of streams that produce at different rates.
-    The solution that we propose is to block a stream until its current value is "consumed", upon which it will compute it's next value.
+    The solution that we propose is to block a stream until its current value is "consumed", upon which it will compute its next value.
     However, this presents its own problem: namely, that the computation will be chock full of race conditions.
     To solve this problem, we propose building a type system on top of linear logic, which allows us to guarantee that once a stream element 
     has been used, we are safe to discard it and proceed to the next value of the stream.
-    
+
     Specifically, we propose using a Linear Type System, which ensures that every value of the stream is used \textbf{exactly} once.
     This means that we can guarantee that a stream will never deadlock waiting for a value to be consumed when it never will, and also
     allows us to deallocate once the value is consumed, which allows us to ensure that a program can have an upper bound on memory usage.
@@ -90,14 +136,22 @@ asa(x, y) = if y then x else nil fi
     % - session types
     
     \section{Deliverables}
-    
+
     Here we list deliverables we hope to ... deliver.
-    
+
     Milestone dates, etc...
-    
+
     \appendix
-    
-    \section{Appendix A}
-    
-    More stuff here?
+
+    \section{Appendix: Queue operation definitions}
+    \label{app:queueops}
+
+    \begin{tabularx}{\textwidth}{ @{} r | Y @{} }
+        $\textnormal{emptyQueue}(\textnormal{queue}) => \textnormal{bool}$ & returns true if the queue is empty. \\
+        $\textnormal{fullQueue}(\textnormal{queue}) => \textnormal{bool}$ & returns true if the queue cannot store any more elements. \\
+        $\textnormal{makeQueue}(\textnormal{n}) => \textnormal{queue}$ & returns a bounded queue of size n. \\
+        $\textnormal{pushToQueue}(\textnormal{queue}, \textnormal{val}) => \textnormal{queue}'$ & returns a queue queue' that is the result of adding val to queue. Requires $!\textnormal{fullQueue}(\textnormal{queue})$. \\
+        $\textnormal{popFromQueue}(\textnormal{queue}) => (\textnormal{queue}', \textnormal{val})$ & returns pair where queue' is the result of popping val from queue.
+    \end{tabularx}
+
 \end{document}
