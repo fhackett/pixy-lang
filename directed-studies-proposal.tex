@@ -3,6 +3,7 @@
 \usepackage{listings}
 \usepackage{tabularx}
 \usepackage{ragged2e}
+\usepackage{hyperref}
 
 \newcolumntype{Y}{>{\RaggedRight\arraybackslash}X} 
 
@@ -14,14 +15,22 @@
     \author{A. Finn Hackett, Reed Mullanix}
     
     \maketitle
+    
+    \begin{abstract}
+        Pixy is a dataflow language based on Lucid\cite{wadgeashcroft85}. In order to adapt the language to bounded-latency programming and give it fine-grained unbuffered concurrency support we propose a new set of semantics and a type system.
+        
+        The semantics and type system are based on the concept of expressing most computation as Turing-incomplete finite state machines. We then express the composition of these state machines as a memory allocation primitive that allows state machines to reason about arbitrary nested state machines without considering their implementation, such that it is possible to express programs that are more powerful than any one state machine while losing a minimum of program analysability.
+        
+        To ensure that invalid series of states cannot be generated we propose a dependent type system that encodes the patterns in which states may be reached, effectively building a type system out of state machine definitions.
+    \end{abstract}
 
     \tableofcontents
 
     \section{Introduction}
 
-    Pixy is a dataflow language based on Lucid, a dataflow programming language that was initially developed throughout the 70s and 80s with the goal of expressing complex algorithms in clear, mathematically coherent statements. Unlike other approaches to this problem which are based on the lambda calculus and are centered around function definition and application, Lucid based itself on an infinitary algebra, allowing programmers to directly define and manipulate streams of data with implicit iteration.
+    Pixy is a dataflow language based on Lucid\cite{wadgeashcroft85}, a dataflow programming language that was initially developed throughout the 70s and 80s with the goal of expressing complex algorithms in clear, mathematically coherent statements. Unlike other approaches to this problem which are based on the lambda calculus and are centered around function definition and application, Lucid based itself on an infinitary algebra, allowing programmers to directly define and manipulate streams of data with implicit iteration.
 
-    Derivative work has taken Lucid in various directions, one significant one being Lucid's apparent suitability for fine-grained concurrency and realtime systems. Two cases in particular are SISAL and RLucid which considered fine-grained concurrency and adaptations of Lucid to realtime computation respectively.
+    Derivative work has taken Lucid in various directions, one significant one being Lucid's apparent suitability for fine-grained concurrency and realtime systems. Two cases in particular are SISAL and RLucid\cite{plaice05} which considered fine-grained concurrency and adaptations of Lucid to realtime computation respectively.
     
     We propose an alternative approach to adapting Lucid to realtime systems programming that combines flexible support for application-controlled approaches to concurrency and data rate synchronisation with an attempt at using a more powerful notion of temporal typing than RLucid to verify the temporal consistency of data streams without any implicit buffering.
     
@@ -88,7 +97,7 @@ end
     
     Aside from cases where a stream does not immediately yield a value, the opposite case where the last value has not yet been processed but a new value is available can occur. This can happen for one of three reasons:
     \begin{itemize}
-        \item the same value is required at different times - this is an invalid Lucid program; all values must be required only once
+        \item the same value is required at different times - this is an invalid Pixy program; all values must be required only once
         \item the stream in question represents an external source of some kind
         \item the stream in question is being used as input for an external I/O sink
     \end{itemize}
@@ -154,7 +163,7 @@ asa(x, y) = if y then x else nil fi
     
     Considering the result of \textbf{alloc!} as an opaque handle with completely unknown timings may be all that is possible in some cases, and as a result inputs and outputs would have to be strictly synchronised both on the machine's inputs and outputs.
     
-    There are perhaps some happy paths that can be considered however: allowing the programmer to annotate expectations regarding inputs and outputs of the resulting state machine would make checking assumptions within the bounds of those annotations. It may also be possible to conservatively observe some properties of resulting state machines if they are simple enough.
+    There are perhaps some happy paths that can be considered however: allowing the programmer to annotate expectations regarding inputs and outputs of the resulting state machine would make checking assumptions possible within the bounds of those annotations. It may also be possible to conservatively observe some properties of resulting state machines if they are simple enough.
     
     There may be some cases where this construct could harm optimisation and analysis opportunities, but this is correct. If an assumption is not stated and cannot be derived then either the rest of the code has to account for this or further assumptions must be stated.
 
@@ -164,7 +173,7 @@ asa(x, y) = if y then x else nil fi
     
     Many optimising compilers must look for gaps in the language semantics that they can use in order to generate more efficient code. Compilers for Haskell and other languages that offer referential transparency and lazy evaluation are a good example of this. They can perform powerful program transformations that skip entire execution paths, simply because the semantics allow this. It is also possible in general to detect and take shortcuts around values known to be constant, or in more dynamic languages to speculatively guess dynamic values and fall back if that guess is wrong.
     
-    Pixy's representability as one or more DFAs (in the case of \textbf{alloc!} usage) suggests a fully general optimisation tool: DFA minimization. Using an established minimization algorithm such as Hopcroft's algorithm a Pixy compiler might be able to easily perform  full-program simplification.
+    Pixy's representability as one or more DFAs (in the case of \textbf{alloc!} usage) suggests a fully general optimisation tool: DFA minimization\cite{dfamin}. Using an established minimization algorithm such as Hopcroft's algorithm a Pixy compiler might be able to easily perform  full-program simplification.
     
     The key obstacle to this being useful lies in finding a compact DFA representation of a Pixy program's state. A naive transformation of a Pixy program using one byte of memory would generate a DFA that has 256 states, which would grow exponentially with program memory usage. A small system utility for example might take 16kb of memory, which would lead to a state space the size of which is 4817 digits long.
     
@@ -206,9 +215,29 @@ end
         \item In the unlikely event that time permits, an optimising compiler based on ideas from section \ref{sec:efficiency}
     \end{itemize}
 
+    
+    \begin{thebibliography}{9}
+        \bibitem{wadgeashcroft85}
+            Wadge W. W.,
+            Ashcroft E. A.
+            \textit{Lucid, the Dataflow Programming Langugage}
+            Academic Press, 1985
+        \bibitem{plaice05}
+            Plaice J.A. (1992)
+            \textit{RLucid, a general real-time dataflow language.}
+            In: Vytopil J. (eds) Formal Techniques in Real-Time and Fault-Tolerant Systems. FTRTFT 1992. Lecture Notes in Computer Science, vol 571. Springer, Berlin, Heidelberg
+        \bibitem{dfamin}
+            Wikipedia.
+            \textit{DFA minimization}.
+            \url{https://en.wikipedia.org/wiki/DFA_minimization}.
+            Accessed 2018-01-16.
+    \end{thebibliography}
+
+    \section*{Appendices}
+
     \appendix
 
-    \section{Appendix: Queue operation definitions}
+    \section{Queue operation definitions}
     \label{app:queueops}
 
     \begin{tabularx}{\textwidth}{ @{} r | Y @{} }
