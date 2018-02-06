@@ -154,10 +154,14 @@
         \begin{matrix}
         \Gamma |- S | L => \Gamma |- S_1 | L_{expr}, L_{vars} \\
         \Gamma |- S_1 | R => \Gamma |- S_2 | R_{expr}, R_{vars} \\
-        \exists t_1, t_2, 
+        d = maxdistance(L_{expr}, R_{expr}) \\
+        <Q_f, \Gamma'> = fresh(Q, \Gamma) \\
+        <P_f, \Gamma''> = fresh(P, \Gamma') \\
+        S_3 = alloc(d, Q_f, S_2) \\
+        S_4 = alloc(P_f, S_3) \\
         \end{matrix}
     }{
-        \Gamma |- S | L \fby R => \Gamma |- S_2 | \fby(L_{expr}, R_{expr}), L_{vars} \cup R_{vars}
+        \Gamma |- S | L \fby R => \Gamma'' |- S_4 | \fby(L_{expr}, R_{expr}, P_f, Q_f), L_{vars} \cup R_{vars}
     }\mathtt{Construct-fby}
     \end{align*}
     
