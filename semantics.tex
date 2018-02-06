@@ -1,0 +1,238 @@
+\documentclass{scrartcl}
+
+\usepackage{listings}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{tabularx}
+\usepackage{ragged2e}
+\usepackage{hyperref}
+
+\DeclareMathOperator{\apply}{apply}
+\DeclareMathOperator{\ifop}{if}
+\DeclareMathOperator{\thenop}{then}
+\DeclareMathOperator{\elseop}{else}
+\DeclareMathOperator{\checkop}{check}
+\DeclareMathOperator{\fby}{fby}
+\DeclareMathOperator{\where}{where}
+
+\makeindex
+
+\begin{document}
+    \title{Pixy formal semantics}
+    \author{A. Finn Hackett, Reed Mullanix}
+    \maketitle
+    
+    \section{Introduction}
+    
+    The evaluation rules of Pixy are split into two steps: construction and evaluation.
+    
+    First, any preprocessing is performed such as determining and allocating queue sizes or scanning for free variables.
+    
+    Then the evaluation rules are applied to the result of this step in order to execute the progam.
+    
+    \section{Utilities}
+    
+    \begin{align*}
+        \apply(E, nil) & = \exists v \in freevariables(E), \apply(E[v/nil], nil) \\
+        \apply(E, <>) & = E \\
+        \apply(E, <<n, v>, R...>) & = apply(E[n/v], R)
+    \end{align*}
+    
+    \section{If}
+    
+    If has some quite interesting semantics - unlike in many languages it does not completely skip
+    the evaluation of the subexpression it does not select. Instead, it always executes both
+    subexpressions except that when a subexpression is not selected the inputs are replaced
+    by nil. This has the effect of synchronising time between both branches regardless of which
+    if chosen, while avoiding the catastrophically bad performance of actually providing data
+    for both branches to process.
+    
+    \subsection{Evaluation}
+    
+    \begin{align*}
+    \frac{
+        C => nil, \apply(T, nil\dots) => \_, \apply(F, nil\dots) => \_
+    }{
+        \ifop(C, <T, T_{args}>, <F, F_{args}>) => nil
+    }\mathtt{Eval-if-nil}
+    \end{align*}
+    \begin{align*}
+    \frac{
+        C => true, \apply(T,T_{args}) => T_{val}, \apply(F, nil) => \_
+    }{
+        \ifop(C, <T, T_{args}>, <F, F_{args}>) => T_{val}
+    }\mathtt{Eval-if-true}
+    \end{align*}
+    \begin{align*}
+    \frac{
+        C => false, \apply(T, nil) => \_, \apply(F, F_{args}) => F_{val}
+    }{
+        \ifop(C, <T, T_{args}>, <F, F_{args}>) => F_{val}
+    }\mathtt{Eval-if-false}
+    \end{align*}
+    
+    \subsection{Construction}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma |- S | C => \Gamma |- S_1 | C_{expr}, C_{vars} \\
+        \Gamma |- S_1 | Tsrc => \Gamma |- S_2 | T_{expr}, T_{vars} \\
+        \Gamma |- S_2 | Fsrc => \Gamma |- S_3 | F_{expr}, F_{vars}
+        \end{matrix}
+    }
+    {\Gamma |- S \left| \begin{matrix}
+        \ifop C \thenop T \\
+        \elseop F
+        \end{matrix} \right. =>
+        \begin{matrix}
+        \ifop(C_{expr}, <T_{expr}, T_{vars}>, <F_{expr}, F_{vars}>), \\
+        C_{vars} \cup T_{vars} \cup F_{vars}
+        \end{matrix}
+    }\mathtt{Construct-if}
+    \end{align*}
+    
+    \section{fby}
+    
+    \subsection{Evaluation}
+    
+    \begin{align*}
+    \frac{
+        S => false, L => nil, R => nil
+    }{
+        \fby(L, R, S, Q) => nil
+    }\mathtt{Eval-fby-1}
+    \end{align*}
+    \begin{align*}
+    \frac{
+        S => false, L => nil, R => R_{val}, R_{val} \neq nil, push(Q, R_{val})
+    }{
+        \fby(L, R, S, Q) => nil
+    }\mathtt{Eval-fby-2}
+    \end{align*}
+    \begin{align*}
+    \frac{
+        S => false, L => L_{val}, L_{val} \neq nil, R => R_{val}, R_{val} \neq nil, push(Q, R_{val}), set(S, true)
+    }{
+        \fby(L, R, S, Q) => L_{val}
+    }\mathtt{Eval-fby-3}
+    \end{align*}
+    \begin{align*}
+    \frac{
+        S => true, R => R_{val}, R_{val} \neq nil, \lnot empty(Q), push(Q, R_{val})
+    }{
+        \fby(L, R, S, Q) => pop(Q)
+    }\mathtt{Eval-fby-4}
+    \end{align*}
+    \begin{align*}
+    \frac{
+        S => true, R => R_{val}, R_{val} \neq nil, empty(Q)
+    }{
+        \fby(L, R, S, Q) => R_{val}
+    }\mathtt{Eval-fby-5}
+    \end{align*}
+    \begin{align*}
+    \frac{
+        S => true, R => nil, empty(Q)
+    }{
+        \fby(L, R, S, Q) => nil
+    }\mathtt{Eval-fby-6}
+    \end{align*}
+    \begin{align*}
+    \frac{
+        S => true, R => nil, \lnot empty(Q)
+    }{
+        \fby(L, R, S, Q) => pop(Q)
+    }\mathtt{Eval-fby-7}
+    \end{align*}
+    
+    \subsection{Construction}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma |- S | L => \Gamma |- S_1 | L_{expr}, L_{vars} \\
+        \Gamma |- S_1 | R => \Gamma |- S_2 | R_{expr}, R_{vars} \\
+        \exists t_1, t_2, 
+        \end{matrix}
+    }{
+        \Gamma |- S | L \fby R => \Gamma |- S_2 | \fby(L_{expr}, R_{expr}), L_{vars} \cup R_{vars}
+    }\mathtt{Construct-fby}
+    \end{align*}
+    
+    \section{check}
+    
+    \subsection{Evaluation}
+    
+    \begin{align*}
+        \frac{
+            E => nil
+        }{
+            \checkop(E) => false
+        }\mathtt{Eval-check-nil}
+    \end{align*}
+    \begin{align*}
+        \frac{
+            E => v, v \neq nil
+        }{
+            \checkop(E) => true
+        }\mathtt{Eval-check-other}
+    \end{align*}
+    
+    \subsection{Construction}
+    
+    \begin{align*}
+    \frac{
+            \Gamma |- S | E => \Gamma |- S_1 | E_{expr}, E_{vars}
+        }{
+            \Gamma |- S | ?E => \checkop(E_{expr}), E_{vars}
+        }\mathtt{Construct-check}
+    \end{align*}
+    
+    \section{where}
+    
+    \subsection{Evaluation}
+    
+    \begin{align*}
+    \frac{
+            e_i => v_i..., set(n_i, v_i), E => V
+        }{
+            \where(E, <n_i, e_i>...) => V
+        }\mathtt{Eval-where}
+    \end{align*}
+    
+    \subsection{Construction}
+    
+    \begin{align*}
+    \frac{
+            \begin{matrix}
+                <nf_i, \Gamma'> = fresh(n_i, \Gamma)... \\
+                S' = alloc(nf_i, S)...\\
+                E_s = E[n_i/nf_i...] \\
+                \Gamma' |- S' | E_s => \Gamma' |- S'_0 | E_{expr}, E_{vars} \\
+                es_i = e_i[n_i/nf_i...]... \\
+                \Gamma' |- S'_{i-1} | es_i => \Gamma' |- S'_i | e_{i, expr}, e_{i,vars}...
+            \end{matrix}
+        }{
+            \Gamma |- S \left| 
+            \begin{array}{l}
+                E \where \\
+                n_i = e_i; ... \\ 
+                end
+            \end{array}
+            \right. => \Gamma' |- S'_n \left| 
+            \begin{matrix}
+                \where(E_{expr}, <nf_i, e_{i, expr}>...), \\
+                E_{vars} \cup e_{i,vars}... \setminus \{nf_i...\}
+            \end{matrix}
+            \right.
+        }\mathtt{Construct-where}
+    \end{align*}
+    
+    \section{hold}
+    
+    TODO: how to achieve nested iteration; current theory: specify a set of streams to sample
+    from and hold constant while the nested iteration finishes. ?
+    
+\end{document}
