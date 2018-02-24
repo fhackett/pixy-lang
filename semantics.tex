@@ -15,6 +15,14 @@
 \DeclareMathOperator{\checkop}{check}
 \DeclareMathOperator{\fby}{fby}
 \DeclareMathOperator{\where}{where}
+\DeclareMathOperator{\choke}{choke}
+\DeclareMathOperator{\foreach}{\mathbf{foreach}}
+
+\DeclareMathOperator{\ite}{ite}
+\DeclareMathOperator{\num}{num}
+\DeclareMathOperator{\id}{id}
+
+\DeclareMathOperator{\compat}{\mathbf{compat}}
 
 \makeindex
 
@@ -22,6 +30,196 @@
     \title{Pixy formal semantics}
     \author{A. Finn Hackett, Reed Mullanix}
     \maketitle
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S; t \vdash C \Downarrow true \\
+        \Gamma; S; t \vdash A \Rightarrow T \\
+        \Gamma; S; t \vdash B \overset{C}{\Leftarrow} 1
+        \end{matrix}
+    }{
+        \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow T
+    }[\mathtt{Synth-ite-true}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S; t \vdash C \Downarrow false \\
+        \Gamma; S; t \vdash A \overset{C}{\Leftarrow} 1 \\
+        \Gamma; S; t \vdash B \Rightarrow T
+        \end{matrix}
+    }{
+        \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow T
+    }[\mathtt{Synth-ite-false}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S; t \vdash C \Downarrow nil \\
+        \Gamma; S; t \vdash A \overset{C}{\Leftarrow} 1 \\
+        \Gamma; S; t \vdash B \overset{C}{\Leftarrow} 1
+        \end{matrix}
+    }{
+        \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow 1
+    }[\mathtt{Synth-ite-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S; t \vdash C \overset{C}{\Rightarrow} 1 \\
+        \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1 \\
+        \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1
+        \end{matrix}
+    }{
+        \Gamma; S; t \vdash \ite(C,A,B) \overset{C}{\Rightarrow} 1
+    }[\mathtt{Synth-ite-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S(L) = 0 \\
+        \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1 \\
+        \Gamma; S; t \vdash A \Rightarrow T
+        \end{matrix}
+    }{
+        \Gamma; S; t \vdash \fby(A, B, L) \Rightarrow T
+    }[\mathtt{Synth-fby-before}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S(L) = 1 \\
+        \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1 \\
+        \Gamma; S; t \vdash B \Rightarrow T
+        \end{matrix}
+    }{
+        \Gamma; S; t \vdash \fby(A, B, L) \Rightarrow T
+    }[\mathtt{Synth-fby-after}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S(L) = 0 \\
+        \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1 \\
+        \Gamma; S; t \vdash A \overset{C}{\Rightarrow} T
+        \end{matrix}
+    }{
+        \Gamma; S; t \vdash \fby(A, B, L) \overset{C}{\Rightarrow} T
+    }[\mathtt{Synth-fby-before-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S[t](L) = 1 \\
+        \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1 \\
+        \Gamma; S; t \vdash B \overset{C}{\Rightarrow} T
+        \end{matrix}
+    }{
+        \Gamma; S; t \vdash \fby(A, B, L) \overset{C}{\Rightarrow} T
+    }[\mathtt{Synth-fby-after-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        T \neq nil
+    }{
+        nil \compat T
+    }[\mathtt{Compat-nil-T}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        T \neq nil
+    }{
+        T \compat nil
+    }[\mathtt{Compat-T-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        T \compat T
+    }[\mathtt{Compat-T-T}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \overline{\oslash; S; t \vdash S(l) \Rightarrow T_l}^{l : c \in C} \\
+        \overline{\overline{l : T_l}^{l : c \in C}, \Gamma; S; t \vdash c \Rightarrow T'_l}^{l : c \in C} \\
+        \overline{T_l \compat T'_l}^{l : c \in C} \\
+        \overline{l : T_l}^{l : c \in C}, \Gamma; S; t \vdash V \Rightarrow T
+        \end{matrix}
+    }{
+        \Gamma; S; t \vdash \where(V, C) \Rightarrow T
+    }[\mathtt{Synth-where}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \overline{\oslash; S; t \vdash S(l) \Rightarrow T_l}^{l : c \in C} \\
+        \overline{\overline{l_2 : T_{l_2}}^{l_2 : c_2 \in C}, \overline{l_3 : 1}^{l_3 : t_3 \in \Gamma}; S; t \vdash c_1 \Rightarrow T'_{l_1}}^{l_1: c_1 \in C} \\
+        \overline{T_l \compat T'_l}^{l : c \in C} \\
+        \overline{l : T_l}^{l: c \in C}, \overline{l : 1}^{l : t \in \Gamma}; S; t \vdash V \overset{C}{\Rightarrow} T
+        \end{matrix}
+    }{
+        \Gamma; S; t \vdash \where(V, C) \overset{C}{\Rightarrow} T
+    }[\mathtt{Synth-where-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \Gamma; S; t \vdash nil \Rightarrow 1
+    }[\mathtt{Synth-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \Gamma; S; t \vdash nil \overset{C}{\Rightarrow} 1
+    }[\mathtt{Synth-nil-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \Gamma; S; t \vdash nil \Leftarrow T
+    }[\mathtt{Check-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \Gamma; S; t \vdash \num(N) \Rightarrow Number
+    }[\mathtt{Synth-num}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \Gamma; S; t \vdash \num(N) \overset{C}{\Rightarrow} 1
+    }[\mathtt{Synth-num-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \Gamma(I) = T
+    }{
+        \Gamma; S; t \vdash \id(I) \Rightarrow T
+    }[\mathtt{Synth-id}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \Gamma(I) = T
+    }{
+        \Gamma; S; t \vdash \id(I) \overset{C}{\Rightarrow} 1
+    }[\mathtt{Synth-id-C}]
+    \end{align*}
     
     \section{Introduction}
     
@@ -36,7 +234,7 @@
     \begin{align*}
         \apply(E, nil) & = \exists v \in freevariables(E), \apply(E[v/nil], nil) \\
         \apply(E, <>) & = E \\
-        \apply(E, <<n, v>, R...>) & = apply(E[n/v], R)
+        \apply(E, <<n, v>, R...>) & = \apply(E[n/v], R)
     \end{align*}
     
     \section{If}
@@ -52,24 +250,48 @@
     
     \begin{align*}
     \frac{
-        C => nil, \apply(T, nil\dots) => \_, \apply(F, nil\dots) => \_
+        \begin{matrix}
+        \Gamma_1 \vdash C \Rightarrow \Gamma_2 \vdash nil \\
+        \Gamma_2 \vdash \choke(T) \Rightarrow \Gamma_3 \vdash nil \\
+        \Gamma_3 \vdash \choke(F) \Rightarrow \Gamma_4 \vdash nil
+        \end{matrix}
     }{
-        \ifop(C, <T, T_{args}>, <F, F_{args}>) => nil
+        \Gamma \vdash \ifop(C, T, F) \Rightarrow \Gamma_4 \vdash nil
     }\mathtt{Eval-if-nil}
     \end{align*}
     \begin{align*}
     \frac{
-        C => true, \apply(T,T_{args}) => T_{val}, \apply(F, nil) => \_
+        \begin{matrix}
+        \Gamma_1 \vdash C \Rightarrow \Gamma_2 \vdash true \\
+        \Gamma_2 \vdash T \Rightarrow \Gamma_3 \vdash V \\
+        \Gamma_3 \vdash \choke(F) \Rightarrow \Gamma_4 \vdash nil
+        \end{matrix}
     }{
-        \ifop(C, <T, T_{args}>, <F, F_{args}>) => T_{val}
+        \Gamma \vdash \ifop(C, T, F) \Rightarrow \Gamma_4 \vdash V
     }\mathtt{Eval-if-true}
     \end{align*}
     \begin{align*}
     \frac{
-        C => false, \apply(T, nil) => \_, \apply(F, F_{args}) => F_{val}
+        \begin{matrix}
+        \Gamma_1 \vdash C \Rightarrow \Gamma_2 \vdash false \\
+        \Gamma_2 \vdash \choke(T) \Rightarrow \Gamma_3 \vdash nil \\
+        \Gamma_3 \vdash F \Rightarrow \Gamma_4 \vdash V
+        \end{matrix}
     }{
-        \ifop(C, <T, T_{args}>, <F, F_{args}>) => F_{val}
+        \Gamma \vdash \ifop(C, T, F) \Rightarrow \Gamma_4 \vdash V
     }\mathtt{Eval-if-false}
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma_1 \vdash \choke(C) \Rightarrow \Gamma_2 \vdash nil \\
+        \Gamma_2 \vdash \choke(T) \Rightarrow \Gamma_3 \vdash nil \\
+        \Gamma_3 \vdash \choke(F) \Rightarrow \Gamma_4 \vdash nil
+        \end{matrix}
+    }{
+        \Gamma \vdash \ifop(C, T, F) \Rightarrow \Gamma_4 \vdash nil
+    }\mathtt{Choke-if}
     \end{align*}
     
     \subsection{Construction}
@@ -77,9 +299,9 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma |- S | C => \Gamma |- S_1 | C_{expr}, C_{vars} \\
-        \Gamma |- S_1 | Tsrc => \Gamma |- S_2 | T_{expr}, T_{vars} \\
-        \Gamma |- S_2 | Fsrc => \Gamma |- S_3 | F_{expr}, F_{vars}
+        \Gamma |- S | C => \Gamma |- S_1 | C_{e} \\
+        \Gamma |- S_1 | Tsrc => \Gamma |- S_2 | T_{e} \\
+        \Gamma |- S_2 | Fsrc => \Gamma |- S_3 | F_{e}
         \end{matrix}
     }
     {\Gamma |- S \left| \begin{matrix}
@@ -147,6 +369,17 @@
     }\mathtt{Eval-fby-7}
     \end{align*}
     
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma \vdash \choke(L) \Rightarrow \Gamma_1 \vdash nil \\
+        \Gamma_1 \vdash \choke(R) \Rightarrow \Gamma_2 \vdash nil
+        \end{matrix}
+    }{
+        \Gamma \vdash \fby(L, R, S, Q) \Rightarrow \Gamma_2 \vdash nil
+    }\mathtt{Choke-fby}
+    \end{align*}
+    
     \subsection{Construction}
     
     \begin{align*}
@@ -184,10 +417,18 @@
         }\mathtt{Eval-check-other}
     \end{align*}
     
+    \begin{align*}
+        \frac{
+            \Gamma \vdash \choke(E) \Rightarrow \Gamma_1 \vdash nil
+        }{
+            \Gamma \vdash \checkop(E) \Rightarrow \Gamma_1 \vdash nil
+        }\mathtt{Choke-check}
+    \end{align*}
+    
     \subsection{Construction}
     
     \begin{align*}
-    \frac{
+        \frac{
             \Gamma |- S | E => \Gamma |- S_1 | E_{expr}, E_{vars}
         }{
             \Gamma |- S | ?E => \checkop(E_{expr}), E_{vars}
@@ -199,8 +440,8 @@
     \subsection{Evaluation}
     
     \begin{align*}
-    \frac{
-            e_i => v_i..., set(n_i, v_i), E => V
+        \frac{
+            \foreach e_i => v_i..., set(n_i, v_i), E => V
         }{
             \where(E, <n_i, e_i>...) => V
         }\mathtt{Eval-where}
