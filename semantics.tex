@@ -21,8 +21,11 @@
 \DeclareMathOperator{\ite}{ite}
 \DeclareMathOperator{\num}{num}
 \DeclareMathOperator{\id}{id}
+\DeclareMathOperator{\bool}{bool}
 
 \DeclareMathOperator{\compat}{\mathbf{compat}}
+
+\DeclareMathOperator{\gtypes}{\Delta}
 
 \makeindex
 
@@ -42,54 +45,57 @@
         \item $\fby$ also uses a choke-based strategy, which should help formalise the idea of "stopping the lhs" and what exactly happens to rhs when we're still
         waiting for lhs. No buffers!
         \item A naive implementation should be terrible but work. I have ideas on how to optimise later. The key to not going forever is to realise that the result will always be the same for the same S, and memoising our way to a stop.
-        \item $\compat$ is to ensure that types remain consistent over time - proving type consistency is TODO, needs stronger statements in some places. (right now you can pad with nils to allow random type changes)
+        \item $\compat$ is to ensure that types remain consistent over time - it keeps a global map and ensures that for any time $t$ a variable has type $1$ or the same type $T$.
+        \item $\gtypes$ is the global map mentioned above
     \end{enumerate}
     
     \begin{align*}
     \frac{
         \begin{matrix}
+        \gtypes_0; \Gamma; S; t \vdash C \Rightarrow Boolean; \gtypes_1 \\
         \Gamma; S; t \vdash C \Downarrow true \\
-        \Gamma; S; t \vdash A \Rightarrow T \\
-        \Gamma; S; t \vdash B \overset{C}{\Leftarrow} 1
+        \gtypes_1; \Gamma; S; t \vdash A \Rightarrow T; \gtypes_2 \\
+        \gtypes_2; \Gamma; S; t \vdash B \overset{C}{\Leftarrow} 1; \gtypes_3
         \end{matrix}
     }{
-        \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow T
+        \gtypes_0; \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow T; \gtypes_3
     }[\mathtt{Synth-ite-true}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma; S; t \vdash C \Downarrow false \\
-        \Gamma; S; t \vdash A \overset{C}{\Leftarrow} 1 \\
-        \Gamma; S; t \vdash B \Rightarrow T
+        \gtypes_0; \Gamma; S; t \vdash C \Rightarrow Boolean; \gtypes_1 \\
+        \Gamma; S; t \vdash C \Downarrow false;  \\
+        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Leftarrow} 1; \gtypes_2 \\
+        \gtypes_2; \Gamma; S; t \vdash B \Rightarrow T; \gtypes_2
         \end{matrix}
     }{
-        \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow T
+        \gtypes_0; \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow T; \gtypes_3
     }[\mathtt{Synth-ite-false}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma; S; t \vdash C \Downarrow nil \\
-        \Gamma; S; t \vdash A \overset{C}{\Leftarrow} 1 \\
-        \Gamma; S; t \vdash B \overset{C}{\Leftarrow} 1
+        \gtypes_0; \Gamma; S; t \vdash C \Rightarrow 1; \gtypes_1 \\
+        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Leftarrow} 1; \gtypes_2 \\
+        \gtypes_2; \Gamma; S; t \vdash B \overset{C}{\Leftarrow} 1; \gtypes_3
         \end{matrix}
     }{
-        \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow 1
+        \gtypes_0; \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow 1; \gtypes_3
     }[\mathtt{Synth-ite-nil}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma; S; t \vdash C \overset{C}{\Rightarrow} 1 \\
-        \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1 \\
-        \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1
+        \gtypes_0; \Gamma; S; t \vdash C \overset{C}{\Rightarrow} 1; \gtypes_1 \\
+        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_2 \\
+        \gtypes_2; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1; \gtypes_3
         \end{matrix}
     }{
-        \Gamma; S; t \vdash \ite(C,A,B) \overset{C}{\Rightarrow} 1
+        \gtypes_0; \Gamma; S; t \vdash \ite(C,A,B) \overset{C}{\Rightarrow} 1; \gtypes_3
     }[\mathtt{Synth-ite-C}]
     \end{align*}
     
@@ -97,11 +103,11 @@
     \frac{
         \begin{matrix}
         S(L) = 0 \\
-        \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1 \\
-        \Gamma; S; t \vdash A \Rightarrow T
+        \gtypes_0; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1; \gtypes_1 \\
+        \gtypes_1; \Gamma; S; t \vdash A \Rightarrow T; \gtypes_2
         \end{matrix}
     }{
-        \Gamma; S; t \vdash \fby(A, B, L) \Rightarrow T
+        \gtypes_0; \Gamma; S; t \vdash \fby(A, B, L) \Rightarrow T; \gtypes_2
     }[\mathtt{Synth-fby-before}]
     \end{align*}
     
@@ -109,11 +115,11 @@
     \frac{
         \begin{matrix}
         S(L) = 1 \\
-        \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1 \\
-        \Gamma; S; t \vdash B \Rightarrow T
+        \gtypes_0; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_1 \\
+        \gtypes_1; \Gamma; S; t \vdash B \Rightarrow T; \gtypes_2
         \end{matrix}
     }{
-        \Gamma; S; t \vdash \fby(A, B, L) \Rightarrow T
+        \gtypes_0; \Gamma; S; t \vdash \fby(A, B, L) \Rightarrow T; \gtypes_2
     }[\mathtt{Synth-fby-after}]
     \end{align*}
     
@@ -121,11 +127,11 @@
     \frac{
         \begin{matrix}
         S(L) = 0 \\
-        \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1 \\
-        \Gamma; S; t \vdash A \overset{C}{\Rightarrow} T
+        \gtypes_0; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1; \gtypes_1 \\
+        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} T; \gtypes_2
         \end{matrix}
     }{
-        \Gamma; S; t \vdash \fby(A, B, L) \overset{C}{\Rightarrow} T
+        \gtypes_0; \Gamma; S; t \vdash \fby(A, B, L) \overset{C}{\Rightarrow} T; \gtypes_2
     }[\mathtt{Synth-fby-before-C}]
     \end{align*}
     
@@ -133,89 +139,83 @@
     \frac{
         \begin{matrix}
         S[t](L) = 1 \\
-        \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1 \\
-        \Gamma; S; t \vdash B \overset{C}{\Rightarrow} T
+        \gtypes_0; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_1 \\
+        \gtypes_1; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} T; \gtypes_2
         \end{matrix}
     }{
-        \Gamma; S; t \vdash \fby(A, B, L) \overset{C}{\Rightarrow} T
+        \gtypes_0; \Gamma; S; t \vdash \fby(A, B, L) \overset{C}{\Rightarrow} T; \gtypes_2
     }[\mathtt{Synth-fby-after-C}]
     \end{align*}
     
     \begin{align*}
-    \frac{
-        T \neq nil
-    }{
-        nil \compat T
-    }[\mathtt{Compat-nil-T}]
-    \end{align*}
-    
-    \begin{align*}
-    \frac{
-        T \neq nil
-    }{
-        T \compat nil
-    }[\mathtt{Compat-T-nil}]
-    \end{align*}
-    
-    \begin{align*}
     \frac{}{
-        T \compat T
-    }[\mathtt{Compat-T-T}]
+        \gtypes \vdash L \compat nil; \gtypes
+    }[\mathtt{Compat-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \gtypes(L) = T, T \neq nil
+    }{
+        \gtypes \vdash L \compat T; \gtypes
+    }[\mathtt{Compat-found}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        L \notin \gtypes, T \neq nil
+    }{
+        \gtypes \vdash L \compat T; L : T, \gtypes
+    }[\mathtt{Compat-learn}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \overline{\oslash; S; t \vdash S(l) \Rightarrow T_l}^{l : c \in C} \\
-        \overline{\overline{l : T_l}^{l : c \in C}, \Gamma; S; t \vdash c \Rightarrow T'_l}^{l : c \in C} \\
-        \overline{T_l \compat T'_l}^{l : c \in C} \\
-        \overline{l : T_l}^{l : c \in C}, \Gamma; S; t \vdash V \Rightarrow T
+        \overline{\emptyset; \emptyset; S; t \vdash S(l) \Rightarrow T_l; \_}^{l : c \in C} \\
+        \overline{\gtypes_{i-1}; \overline{l' : T_{l'}}^{l' : c' \in C}, \Gamma; S; t \vdash c \Rightarrow T'_l; \gtypes_{i}}^{l : c \in C, i \in 1 .. |C|} \\
+        \overline{\gtypes_{|C|+i-1} \vdash l \compat T'_l; \gtypes_{|C|+i}}^{l : c \in C, i \in 1 .. |C|} \\
+        \gtypes_{2|C|}; \overline{l : T_l}^{l : c \in C}, \Gamma; S; t \vdash V \Rightarrow T; \gtypes_{2|C|+1}
         \end{matrix}
     }{
-        \Gamma; S; t \vdash \where(V, C) \Rightarrow T
+        \gtypes_0; \Gamma; S; t \vdash \where(V, C) \Rightarrow T; \gtypes_{2|C|+1}
     }[\mathtt{Synth-where}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \overline{\oslash; S; t \vdash S(l) \Rightarrow T_l}^{l : c \in C} \\
-        \overline{\overline{l_2 : T_{l_2}}^{l_2 : c_2 \in C}, \overline{l_3 : 1}^{l_3 : t_3 \in \Gamma}; S; t \vdash c_1 \Rightarrow T'_{l_1}}^{l_1: c_1 \in C} \\
-        \overline{T_l \compat T'_l}^{l : c \in C} \\
-        \overline{l : T_l}^{l: c \in C}, \overline{l : 1}^{l : t \in \Gamma}; S; t \vdash V \overset{C}{\Rightarrow} T
+        \overline{\emptyset; \emptyset; S; t \vdash S(l) \Rightarrow T_l; \_}^{l : c \in C} \\
+        \overline{\gtypes_{i-1}; \overline{l_2 : T_{l_2}}^{l_2 : c_2 \in C}, \overline{l_3 : 1}^{l_3 : t_3 \in \Gamma}; S; t \vdash c_1 \Rightarrow T'_{l_1}; \gtypes_i}^{l_1: c_1 \in C, i \in |C|} \\
+        \overline{\gtypes_{|C|+i-1} \vdash l \compat T'_l; \gtypes_{|C|+i}}^{l : c \in C, i \in 1 .. |C|} \\
+        \gtypes_{2|C|}; \overline{l : T_l}^{l: c \in C}, \overline{l : 1}^{l : t \in \Gamma}; S; t \vdash V \overset{C}{\Rightarrow} T; \gtypes_{2|C|+1}
         \end{matrix}
     }{
-        \Gamma; S; t \vdash \where(V, C) \overset{C}{\Rightarrow} T
+        \gtypes_0; \Gamma; S; t \vdash \where(V, C) \overset{C}{\Rightarrow} T; \gtypes_{2|C|+1}
     }[\mathtt{Synth-where-C}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \Gamma; S; t \vdash nil \Rightarrow 1
+        \gtypes; \Gamma; S; t \vdash nil \Rightarrow 1; \gtypes
     }[\mathtt{Synth-nil}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \Gamma; S; t \vdash nil \overset{C}{\Rightarrow} 1
+        \gtypes; \Gamma; S; t \vdash nil \overset{C}{\Rightarrow} 1; \gtypes
     }[\mathtt{Synth-nil-C}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \Gamma; S; t \vdash nil \Leftarrow T
-    }[\mathtt{Check-nil}]
-    \end{align*}
-    
-    \begin{align*}
-    \frac{}{
-        \Gamma; S; t \vdash \num(N) \Rightarrow Number
+        \gtypes; \Gamma; S; t \vdash \num(N) \Rightarrow Number; \gtypes
     }[\mathtt{Synth-num}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \Gamma; S; t \vdash \num(N) \overset{C}{\Rightarrow} 1
+        \gtypes; \Gamma; S; t \vdash \num(N) \overset{C}{\Rightarrow} 1; \gtypes
     }[\mathtt{Synth-num-C}]
     \end{align*}
     
@@ -223,7 +223,7 @@
     \frac{
         \Gamma(I) = T
     }{
-        \Gamma; S; t \vdash \id(I) \Rightarrow T
+        \gtypes; \Gamma; S; t \vdash \id(I) \Rightarrow T; \gtypes
     }[\mathtt{Synth-id}]
     \end{align*}
     
@@ -231,8 +231,20 @@
     \frac{
         \Gamma(I) = T
     }{
-        \Gamma; S; t \vdash \id(I) \overset{C}{\Rightarrow} 1
+        \gtypes; \Gamma; S; t \vdash \id(I) \overset{C}{\Rightarrow} 1; \gtypes
     }[\mathtt{Synth-id-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \gtypes; \Gamma; S; t \vdash \bool(B) \Rightarrow Boolean; \gtypes
+    }[\mathtt{Synth-boolean}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \gtypes; \Gamma; S; t \vdash \bool(B) \overset{C}{\Rightarrow} 1; \gtypes
+    }[\mathtt{Synth-boolean-C}]
     \end{align*}
     
     \section{Introduction}
