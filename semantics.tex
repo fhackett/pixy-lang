@@ -31,6 +31,20 @@
     \author{A. Finn Hackett, Reed Mullanix}
     \maketitle
     
+    Basic context:
+    \begin{enumerate}
+        \item $\Gamma$ is the typing context
+        \item $S$ is the state at $t-1$
+        \item $t$ is the current timestep
+        \item $\Rightarrow$ is normal type synthesis
+        \item $\overset{C}{\Rightarrow}$ is "choked" type synthesis, for use as per my last "if" spec. Watch what where does under those circumstances.
+        \item $\Downarrow$ is evaluation, not explicitly defined but used in ite
+        \item $\fby$ also uses a choke-based strategy, which should help formalise the idea of "stopping the lhs" and what exactly happens to rhs when we're still
+        waiting for lhs. No buffers!
+        \item A naive implementation should be terrible but work. I have ideas on how to optimise later. The key to not going forever is to realise that the result will always be the same for the same S, and memoising our way to a stop.
+        \item $\compat$ is to ensure that types remain consistent over time - proving type consistency is TODO, needs stronger statements in some places. (right now you can pad with nils to allow random type changes)
+    \end{enumerate}
+    
     \begin{align*}
     \frac{
         \begin{matrix}
