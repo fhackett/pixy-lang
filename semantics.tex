@@ -55,7 +55,7 @@
         \gtypes_0; \Gamma; S; t \vdash C \Rightarrow Boolean; \gtypes_1 \\
         \Gamma; S; t \vdash C \Downarrow true \\
         \gtypes_1; \Gamma; S; t \vdash A \Rightarrow T; \gtypes_2 \\
-        \gtypes_2; \Gamma; S; t \vdash B \overset{C}{\Leftarrow} 1; \gtypes_3
+        \gtypes_2; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1; \gtypes_3
         \end{matrix}
     }{
         \gtypes_0; \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow T; \gtypes_3
@@ -67,7 +67,7 @@
         \begin{matrix}
         \gtypes_0; \Gamma; S; t \vdash C \Rightarrow Boolean; \gtypes_1 \\
         \Gamma; S; t \vdash C \Downarrow false;  \\
-        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Leftarrow} 1; \gtypes_2 \\
+        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_2 \\
         \gtypes_2; \Gamma; S; t \vdash B \Rightarrow T; \gtypes_2
         \end{matrix}
     }{
@@ -79,8 +79,8 @@
     \frac{
         \begin{matrix}
         \gtypes_0; \Gamma; S; t \vdash C \Rightarrow 1; \gtypes_1 \\
-        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Leftarrow} 1; \gtypes_2 \\
-        \gtypes_2; \Gamma; S; t \vdash B \overset{C}{\Leftarrow} 1; \gtypes_3
+        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_2 \\
+        \gtypes_2; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1; \gtypes_3
         \end{matrix}
     }{
         \gtypes_0; \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow 1; \gtypes_3
@@ -138,7 +138,7 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        S[t](L) = 1 \\
+        S(L) = 1 \\
         \gtypes_0; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_1 \\
         \gtypes_1; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} T; \gtypes_2
         \end{matrix}
