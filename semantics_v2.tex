@@ -1,0 +1,124 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+% \usepackage{proof}
+\usepackage{syntax}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\title{Pixy Semantics}
+\author{Reed Mullanix, Finn Hackett}
+\date{February 2018}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+The semantics of Pixy can be divided up into 3 portions: The term language, how that term language is evaluated, and the type system.
+\section{Term Language}
+The term language of Pixy is (roughly) as follows:
+\begin{grammar}
+<expr>  ::= <literal>
+    \alt <var>
+    \alt "nil"
+    \alt "?" <expr>
+    \alt "if" <expr> "then" <expr> "else" <expr>
+    \alt <expr> "fby" <expr>
+    \alt <expr> "where" (<var> "=" <expr>)*
+    \alt "fun" <var> "=>" <expr>
+    \alt <expr> <expr>
+\end{grammar}
+
+{\color{red} NOTE:} This is incomplete! We need to standardize on the term language.
+
+\section{Evaluation}
+The evaluation rules for Pixy are quite different from other languages.
+To begin with, each expression can be seen as a taking a State and producing a value and a new State. This state is then fed back into the expression to produce a new State and value, and so on. However, some expressions pose some problems. For example, when evaluating \lstinline{if ... then ... else} expression, we should only really evaluate one of the branches, but doing so may skip important stateful evaluation inside of the untaken branch. To reconcile this, we present a model of evaluation which we call "Choked Evaluation". Whenever we are presented with a branching construct, we still evaluate the branches, with the caveat that all variables \textit{and} literals evaluate to \lstinline{nil} on the branch that is not taken.
+
+Another point we need to make is that evaluation is only valid on \textbf{closed} expressions, or expressions that have no free variables.
+
+{\color{red} NOTE:} Insert full evaluation semantics here.
+
+{\color{red} NOTE:} We need to spec out when exactly evaluation terminates for a given step.
+
+\section{Type Theory}
+Typically, type systems follow this general form:
+\begin{itemize}
+    \item The user declares the construction and elimination rules for a type.
+    \item The user then uses theses construction rules to create programs.
+\end{itemize}
+We prefer to take a different approach, which has been strongly influenced 
+by systems such as NuPRL. Generally speaking, our type system works as follows:
+\begin{itemize}
+    \item The user writes a program.
+    \item The user then creates a proof that the program inhabits some type.
+\end{itemize}
+
+That of course raises the question: When does a program inhabit a type? To answer that, we must first answer what exactly a type is in Pixy. We define a type as having 2 components:
+\begin{enumerate}
+    \item A collection of canonical inhabitants.
+    \item An equivalence relation over those inhabitants.
+\end{enumerate}
+
+For example, the canonical inhabitants of the type \lstinline{Nat} are $0,1,2,3...$ and the equivalence relationship is just the equivalence relationship of natural numbers. When we say that $a \in A$, what we are really saying is that $a = a$ under the equality relationship imposed by $A$. This point may seem slightly pedantic, but it has large implications. This can be extended to separate elements, so we could also propose that $a = b \in A$, or that 2 terms $a$ and $b$ are equivalent under the equality relation of $A$. Note that the canonical inhabitants aren't the only members of a type. Any term that evaluates to a canonical inhabitant is also a member of the type. On top of that, if we have 2 terms $t, t'$ and they evaluate to $a, a'$ respectively, and $a = a' \in A$, then $t, t' \in A$ as well!
+
+Continuing in the spirit of NuPRL, what exactly is $a \in A$? Well, if we use the logic of Propositions-as-Types, $a \in A$ should really just be a type! We shall denote this type as $Eq\ a\ b\ A$. We shall also include all of the standard portions of Martin-Löf Type Theory.
+
+{\color{red} NOTE:} This section is incomplete, as we have multiple ways of preceding. I have listed out the possible options.
+
+\begin{enumerate}
+    \item Use a temporally indexed dependent type. This allows us to encode
+    certain properties such as "$\forall$ Times t, ..." and "$\exists$ Time t, ..." easily.
+    \item Use a co-inductive stream type. This would allow us to more easily
+    prove relationships between 2 streams.
+\end{enumerate}
+
+\section{Relating Programs to Types}
+Note again that we do not derive the types of programs from the bottom-up, as is the norm. Rather, we prove that programs inhabit types from the top-down, using a proof refinement system.
+
+To begin, a proof is a tree of \textbf{Judgments}, which consists of a number of \textbf{hypotheses} of the form $x:A$ followed by a \textbf{Goal}, which is of the form $term:T$. To proceed with the proof, we need to use refinement rules, which are ways of decomposing sub-goals. For example, say we had some term \lstinline{fun x => x}, and we wanted to prove that this term is a member of $Bool \rightarrow Bool$. An example proof would be as follows:
+\begin{verbatim}
+    H >> (fun x => x) in Bool -> Bool by intro-function.
+        x:Bool, H >> x in Bool by hypothesis x.
+        H >> Bool in U by bool-intro-universe.
+\end{verbatim}
+Note that we use 3 rules here, \lstinline{intro-function}, \lstinline{hypothesis}, and \lstinline{intro-universe}. These correspond to the standard type inference rules, but there is a catch: We cannot infer the types. This is because a term can inhabit many potential types. For example, we could also prove that \lstinline{fun x => x} inhabits the type $\Pi_{A:U}.A \rightarrow A$:
+\begin{verbatim}
+    H >> (fun x => x) in (A:U) -> A -> A by intro-function-pi
+        A:U, x:A, H >> x in A by hypothesis x.
+\end{verbatim}
+
+{\color{red} NOTE:} The above rule needs some thinking about. As such, I have decided to not include it in the rule section yet.
+
+{\color{red} NOTE:} Write some examples that show how to use the rules to prove nil-safety.
+
+\section{Rules}
+\subsection{Bool}
+\begin{verbatim}
+    H >> true in Bool by intro-true.
+    H >> false in Bool by intro-false
+    H >> Bool in U1 by bool-intro-universe.
+\end{verbatim}
+\subsection{Nil}
+\begin{verbatim}
+    H >> nil in Nil by intro-nil.
+    -- TODO: Write the choking type rules.
+    -- Needs clarification
+\end{verbatim}
+\subsection{Functions}
+\begin{verbatim}
+    H >> (fun x => b) in (x:A) -> B by intro-function.
+        x:A, H >> b in B.
+        H >> A in Ui.
+        H >> B(x) in Ui. -- We may have to be careful about universe levels?
+    H >> (x:A) -> B in Ui by function-intro-universe.
+        H >> A in Ui.
+        H >> B in Ui.
+\end{verbatim}
+\subsection{Universes}
+\begin{verbatim}
+    H >> Ui in Uj by universe-cumulative.
+        -- Note, i < j.
+\end{verbatim}
+\end{document}
