@@ -1,10 +1,12 @@
 \documentclass{article}
 \usepackage[utf8]{inputenc}
-\usepackage{amsmath}
+\usepackage{amsmath, amssymb}
 % \usepackage{proof}
 \usepackage{syntax}
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{hyperref}
+
 
 \title{Pixy Semantics}
 \author{Reed Mullanix, Finn Hackett}
@@ -65,14 +67,24 @@ For example, the canonical inhabitants of the type \lstinline{Nat} are $0,1,2,3.
 
 Continuing in the spirit of NuPRL, what exactly is $a \in A$? Well, if we use the logic of Propositions-as-Types, $a \in A$ should really just be a type! We shall denote this type as $Eq\ a\ b\ A$. We shall also include all of the standard portions of Martin-Löf Type Theory.
 
-{\color{red} NOTE:} This section is incomplete, as we have multiple ways of preceding. I have listed out the possible options.
+Time is represented by using a the type $Next : \star \rightarrow \star$. This type corresponds with the $\circ$ operator in Linear Temporal logic. With this primitive type, we can begin to define the operators of Linear Temporal Logic using inductive and coinductive types.
+\begin{align*}
+    &\circ A \text{ corresponds to } Next(A) \\
+    &\square A \text{ corresponds to } \nu \sigma . A \times Next(\sigma) \\
+    &\lozenge A \text{ corresponds to } \mu \sigma . A + Next(\sigma) \\
+    &A \triangleright B \text{ corresponds to } \mu \sigma . A \times Next(B + \sigma) \\ 
+\end{align*}
 
-\begin{enumerate}
-    \item Use a temporally indexed dependent type. This allows us to encode
-    certain properties such as "$\forall$ Times t, ..." and "$\exists$ Time t, ..." easily.
-    \item Use a co-inductive stream type. This would allow us to more easily
-    prove relationships between 2 streams.
-\end{enumerate}
+There is an alternitave encoding by using temporally-indexed types, which makes quantification over time easier. This was not chosen, as the inductive/coinductive defintions make inductive/coinductive reasoning easier, which makes the kind of proofs we wish to do easier (For example, proving that 2 streams are in sync).
+
+% {\color{red} NOTE:} This section is incomplete, as we have multiple ways of preceding. I have listed out the possible options.
+
+% \begin{enumerate}
+%     \item Use a temporally indexed dependent type. This allows us to encode
+%     certain properties such as "$\forall$ Times t, ..." and "$\exists$ Time t, ..." easily.
+%     \item Use a co-inductive stream type. This would allow us to more easily
+%     prove relationships between 2 streams.
+% \end{enumerate}
 
 \section{Relating Programs to Types}
 Note again that we do not derive the types of programs from the bottom-up, as is the norm. Rather, we prove that programs inhabit types from the top-down, using a proof refinement system.
@@ -121,4 +133,11 @@ Note that we use 3 rules here, \lstinline{intro-function}, \lstinline{hypothesis
     H >> Ui in Uj by universe-cumulative.
         -- Note, i < j.
 \end{verbatim}
+
+\section{Bibliography}
+{\color{red} NOTE:} This Section needs to be properly formatted, right now it is just a dumping ground for things that have influenced this work.\\
+\url{http://www.nuprl.org/book/} \\
+\url{http://www.nuprl.org/documents/Constable/naive.pdf} \\
+\url{http://ect.bell-labs.com/who/ajeffrey/papers/plpv12.pdf} \\
+
 \end{document}
