@@ -220,7 +220,7 @@
         S_f; F; M \vdash F \overset{C}{\Downarrow} nil; S_f'
         \end{matrix}
     }{
-        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow V; S_c, S_t, S_f
+        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow V; S_c', S_t', S_f'
     }[\mathtt{Eval-ite-true}]
     \end{align*}
     
@@ -232,7 +232,7 @@
         S_f; F; M \vdash F \Downarrow V; S_f'
         \end{matrix}
     }{
-        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow V; S_c, S_t, S_f
+        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow V; S_c', S_t', S_f'
     }[\mathtt{Eval-ite-false}]
     \end{align*}
     
@@ -244,7 +244,7 @@
         S_f; F; M \vdash F \overset{C}{\Downarrow} nil; S_f'
         \end{matrix}
     }{
-        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow nil; S_c, S_t, S_f
+        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow nil; S_c', S_t', S_f'
     }[\mathtt{Eval-ite-nil}]
     \end{align*}
     
@@ -256,7 +256,7 @@
         S_f; F; M \vdash F \overset{C}{\Downarrow} nil; S_f'
         \end{matrix}
     }{
-        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \overset{C}{\Downarrow} nil; S_c, S_t, S_f
+        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \overset{C}{\Downarrow} nil; S_c', S_t', S_f'
     }[\mathtt{Eval-ite-C}]
     \end{align*}
     
