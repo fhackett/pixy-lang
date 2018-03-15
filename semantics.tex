@@ -8,6 +8,8 @@
 \usepackage{ragged2e}
 \usepackage{hyperref}
 
+\usepackage{syntax}
+
 \DeclareMathOperator{\apply}{apply}
 \DeclareMathOperator{\ifop}{if}
 \DeclareMathOperator{\thenop}{then}
@@ -18,12 +20,18 @@
 \DeclareMathOperator{\choke}{choke}
 \DeclareMathOperator{\foreach}{\mathbf{foreach}}
 
+\DeclareMathOperator{\ident}{\mathbf{ident}}
+
 \DeclareMathOperator{\ite}{ite}
+\DeclareMathOperator{\nextop}{next}
 \DeclareMathOperator{\num}{num}
 \DeclareMathOperator{\id}{id}
 \DeclareMathOperator{\bool}{bool}
 
 \DeclareMathOperator{\compat}{\mathbf{compat}}
+\DeclareMathOperator{\canon}{\mathbf{canon}}
+
+\DeclareMathOperator{\numtype}{\mathbb{R}}
 
 \DeclareMathOperator{\gtypes}{\Delta}
 
@@ -34,476 +42,574 @@
     \author{A. Finn Hackett, Reed Mullanix}
     \maketitle
     
-    Basic context:
-    \begin{enumerate}
-        \item $\Gamma$ is the typing context
-        \item $S$ is the state at $t-1$
-        \item $t$ is the current timestep
-        \item $\Rightarrow$ is normal type synthesis
-        \item $\overset{C}{\Rightarrow}$ is "choked" type synthesis, for use as per my last "if" spec. Watch what where does under those circumstances.
-        \item $\Downarrow$ is evaluation, not explicitly defined but used in ite
-        \item $\fby$ also uses a choke-based strategy, which should help formalise the idea of "stopping the lhs" and what exactly happens to rhs when we're still
-        waiting for lhs. No buffers!
-        \item A naive implementation should be terrible but work. I have ideas on how to optimise later. The key to not going forever is to realise that the result will always be the same for the same S, and memoising our way to a stop.
-        \item $\compat$ is to ensure that types remain consistent over time - it keeps a global map and ensures that for any time $t$ a variable has type $1$ or the same type $T$.
-        \item $\gtypes$ is the global map mentioned above
-    \end{enumerate}
+    \section{Term language}
+    
+    \begin{grammar}
+        <expr> ::= <literal>
+            \alt <var>
+            \alt "nil"
+            \alt "?" <expr>
+            \alt "if" <expr> "then" <expr> "else" <expr>
+            \alt <expr> "fby" <expr>
+            \alt <expr> "where" <wheredecls>
+            \alt <var> "(" <opargvals> ")"
+            \alt <expr> "+" <expr>
+            \alt <expr> "-" <expr>
+            \alt <expr> "*" <expr>
+            \alt <expr> "/" <expr>
+        
+        <opargvals> ::= <expr> "," <opargvals> | <expr>
+        
+        <opargslist> ::= <var> "," <opargslist> | <var>
+        
+        <wheredecl> ::= <var> "=" <expr> 
+            \alt <var> "(" <opargslist> ")" "=" <expr>
+            
+        <wheredecls> ::= <wheredecl>; <wheredecls> | <wheredecl>
+    \end{grammar}
+
+    \section{Init rules}
     
     \begin{align*}
     \frac{
-        \begin{matrix}
-        \gtypes_0; \Gamma; S; t \vdash C \Rightarrow Boolean; \gtypes_1 \\
-        \Gamma; S; t \vdash C \Downarrow true \\
-        \gtypes_1; \Gamma; S; t \vdash A \Rightarrow T; \gtypes_2 \\
-        \gtypes_2; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1; \gtypes_3
-        \end{matrix}
+        F \vdash E \overset{init}{\Rightarrow} S
     }{
-        \gtypes_0; \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow T; \gtypes_3
-    }[\mathtt{Synth-ite-true}]
+        F \vdash ?E \overset{init}{\Rightarrow} S
+    }[\mathtt{Init-check}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \gtypes_0; \Gamma; S; t \vdash C \Rightarrow Boolean; \gtypes_1 \\
-        \Gamma; S; t \vdash C \Downarrow false;  \\
-        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_2 \\
-        \gtypes_2; \Gamma; S; t \vdash B \Rightarrow T; \gtypes_2
+        F \vdash L \overset{init}{\Rightarrow} S_l \\
+        F \vdash R \overset{init}{\Rightarrow} S_r
         \end{matrix}
     }{
-        \gtypes_0; \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow T; \gtypes_3
-    }[\mathtt{Synth-ite-false}]
+        F \vdash L \fby R \overset{init}{\Rightarrow} false, S_l, S_r
+    }[\mathtt{Init-fby}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \gtypes_0; \Gamma; S; t \vdash C \Rightarrow 1; \gtypes_1 \\
-        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_2 \\
-        \gtypes_2; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1; \gtypes_3
+        F \vdash C \overset{init}{\Rightarrow} S_c \\
+        F \vdash T \overset{init}{\Rightarrow} S_t \\
+        F \vdash F \overset{init}{\Rightarrow} S_f
         \end{matrix}
     }{
-        \gtypes_0; \Gamma; S; t \vdash \ite(C,A,B) \Rightarrow 1; \gtypes_3
-    }[\mathtt{Synth-ite-nil}]
+        F \vdash \ifop C \thenop T \elseop F \overset{init}{\Rightarrow} S_c, S_t, S_f
+    }[\mathtt{Init-ite}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        F \vdash E \overset{init}{\Rightarrow} S
+    }{
+        F \vdash \nextop E \overset{init}{\Rightarrow} false, S
+    }[\mathtt{Init-next}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \gtypes_0; \Gamma; S; t \vdash C \overset{C}{\Rightarrow} 1; \gtypes_1 \\
-        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_2 \\
-        \gtypes_2; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1; \gtypes_3
+        F \vdash E \overset{init}{\Rightarrow} s \\
+        F \vdash E_n \overset{whereinit}{\Rightarrow} S; F'
         \end{matrix}
     }{
-        \gtypes_0; \Gamma; S; t \vdash \ite(C,A,B) \overset{C}{\Rightarrow} 1; \gtypes_3
-    }[\mathtt{Synth-ite-C}]
+        F \vdash n = E; E_n \overset{whereinit}{\Rightarrow} \left<nil, s\right>, S; F'
+    }[\mathtt{WhereInit-v-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{
-        \begin{matrix}
-        S(L) = 0 \\
-        \gtypes_0; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1; \gtypes_1 \\
-        \gtypes_1; \Gamma; S; t \vdash A \Rightarrow T; \gtypes_2
-        \end{matrix}
+        F \vdash E_n \overset{whereinit}{\Rightarrow} S; F'
     }{
-        \gtypes_0; \Gamma; S; t \vdash \fby(A, B, L) \Rightarrow T; \gtypes_2
-    }[\mathtt{Synth-fby-before}]
-    \end{align*}
-    
-    \begin{align*}
-    \frac{
-        \begin{matrix}
-        S(L) = 1 \\
-        \gtypes_0; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_1 \\
-        \gtypes_1; \Gamma; S; t \vdash B \Rightarrow T; \gtypes_2
-        \end{matrix}
-    }{
-        \gtypes_0; \Gamma; S; t \vdash \fby(A, B, L) \Rightarrow T; \gtypes_2
-    }[\mathtt{Synth-fby-after}]
-    \end{align*}
-    
-    \begin{align*}
-    \frac{
-        \begin{matrix}
-        S(L) = 0 \\
-        \gtypes_0; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} 1; \gtypes_1 \\
-        \gtypes_1; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} T; \gtypes_2
-        \end{matrix}
-    }{
-        \gtypes_0; \Gamma; S; t \vdash \fby(A, B, L) \overset{C}{\Rightarrow} T; \gtypes_2
-    }[\mathtt{Synth-fby-before-C}]
-    \end{align*}
-    
-    \begin{align*}
-    \frac{
-        \begin{matrix}
-        S(L) = 1 \\
-        \gtypes_0; \Gamma; S; t \vdash A \overset{C}{\Rightarrow} 1; \gtypes_1 \\
-        \gtypes_1; \Gamma; S; t \vdash B \overset{C}{\Rightarrow} T; \gtypes_2
-        \end{matrix}
-    }{
-        \gtypes_0; \Gamma; S; t \vdash \fby(A, B, L) \overset{C}{\Rightarrow} T; \gtypes_2
-    }[\mathtt{Synth-fby-after-C}]
+        F \vdash f(A) = E; E_n \overset{whereinit}{\Rightarrow} S; f \to \left<A, E \right>, F'
+    }[\mathtt{WhereInit-fn-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \gtypes \vdash L \compat nil; \gtypes
-    }[\mathtt{Compat-nil}]
-    \end{align*}
-    
-    \begin{align*}
-    \frac{
-        \gtypes(L) = T, T \neq nil
-    }{
-        \gtypes \vdash L \compat T; \gtypes
-    }[\mathtt{Compat-found}]
-    \end{align*}
-    
-    \begin{align*}
-    \frac{
-        L \notin \gtypes, T \neq nil
-    }{
-        \gtypes \vdash L \compat T; L : T, \gtypes
-    }[\mathtt{Compat-learn}]
+        F \vdash \overset{whereinit}{\Rightarrow} \emptyset; F
+    }[\mathtt{WhereInit-empty}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \overline{\emptyset; \emptyset; S; t \vdash S(l) \Rightarrow T_l; \_}^{l : c \in C} \\
-        \overline{\gtypes_{i-1}; \overline{l' : T_{l'}}^{l' : c' \in C}, \Gamma; S; t \vdash c \Rightarrow T'_l; \gtypes_{i}}^{l : c \in C, i \in 1 .. |C|} \\
-        \overline{\gtypes_{|C|+i-1} \vdash l \compat T'_l; \gtypes_{|C|+i}}^{l : c \in C, i \in 1 .. |C|} \\
-        \gtypes_{2|C|}; \overline{l : T_l}^{l : c \in C}, \Gamma; S; t \vdash V \Rightarrow T; \gtypes_{2|C|+1}
+        F \vdash E \overset{init}{\Rightarrow} S_e \\
+        F \vdash E_s \overset{whereinit}{\Rightarrow} S
         \end{matrix}
     }{
-        \gtypes_0; \Gamma; S; t \vdash \where(V, C) \Rightarrow T; \gtypes_{2|C|+1}
-    }[\mathtt{Synth-where}]
+        F \vdash E \where E_s \overset{init}{\Rightarrow} S_e, S
+    }[\mathtt{Init-where}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \overline{\emptyset; \emptyset; S; t \vdash S(l) \Rightarrow T_l; \_}^{l : c \in C} \\
-        \overline{\gtypes_{i-1}; \overline{l_2 : T_{l_2}}^{l_2 : c_2 \in C}, \overline{l_3 : 1}^{l_3 : t_3 \in \Gamma}; S; t \vdash c_1 \Rightarrow T'_{l_1}; \gtypes_i}^{l_1: c_1 \in C, i \in |C|} \\
-        \overline{\gtypes_{|C|+i-1} \vdash l \compat T'_l; \gtypes_{|C|+i}}^{l : c \in C, i \in 1 .. |C|} \\
-        \gtypes_{2|C|}; \overline{l : T_l}^{l: c \in C}, \overline{l : 1}^{l : t \in \Gamma}; S; t \vdash V \overset{C}{\Rightarrow} T; \gtypes_{2|C|+1}
+        F \vdash A \overset{init}{\Rightarrow} S \\
+        F \vdash A_n \overset{applyinit}{\Rightarrow} S_n
         \end{matrix}
     }{
-        \gtypes_0; \Gamma; S; t \vdash \where(V, C) \overset{C}{\Rightarrow} T; \gtypes_{2|C|+1}
-    }[\mathtt{Synth-where-C}]
+        F \vdash A, A_n \overset{applyinit}{\Rightarrow} S, S_n
+    }[\mathtt{ApplyInit-arg}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \gtypes; \Gamma; S; t \vdash nil \Rightarrow 1; \gtypes
-    }[\mathtt{Synth-nil}]
+        F \vdash \overset{applyinit}{\Rightarrow} \emptyset
+    }[\mathtt{ApplyInit-empty}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        F(f) = \left< \_, E \right> \\
+        F \vdash E \overset{init}{\Rightarrow} S_e \\
+        F \vdash A \overset{applyinit}{\Rightarrow} S
+        \end{matrix}
+    }{
+        F \vdash f(A) \overset{init}{\Rightarrow} S_e, S
+    }[\mathtt{Init-apply}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \gtypes; \Gamma; S; t \vdash nil \overset{C}{\Rightarrow} 1; \gtypes
-    }[\mathtt{Synth-nil-C}]
+        F \vdash \_ \overset{init}{\Rightarrow} \emptyset
+    }[\mathtt{Init-literal}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        F \vdash L \overset{init}{\Rightarrow} S_l \\
+        F \vdash R \overset{init}{\Rightarrow} S_r
+        \end{matrix}
+    }{
+        F \vdash L \enspace \_ \enspace R \overset{init}{\Rightarrow} S_l, S_r
+    }[\mathtt{Init-binop}]
+    \end{align*}
+
+    \section{Evaluation rules}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \Downarrow V; S' \\
+        V \neq nil
+        \end{matrix}
+    }{
+        S; F; M \vdash ?E \Downarrow true; S'
+    }[\mathtt{Eval-check-true}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        S; F; M \vdash E \Downarrow nil; S'
+    }{
+        S; F; M \vdash ?E \Downarrow false; S'
+    }[\mathtt{Eval-check-false}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S_c; F; M \vdash C \Downarrow true; S_c' \\
+        S_t; F; M \vdash T \Downarrow V; S_t' \\
+        S_f; F; M \vdash F \overset{C}{\Downarrow} nil; S_f'
+        \end{matrix}
+    }{
+        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow V; S_c, S_t, S_f
+    }[\mathtt{Eval-ite-true}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S_c; F; M \vdash C \Downarrow false; S_c' \\
+        S_t; F; M \vdash T \overset{C}{\Downarrow} nil; S_t' \\
+        S_f; F; M \vdash F \Downarrow V; S_f'
+        \end{matrix}
+    }{
+        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow V; S_c, S_t, S_f
+    }[\mathtt{Eval-ite-false}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S_c; F; M \vdash C \Downarrow nil; S_c' \\
+        S_t; F; M \vdash T \overset{C}{\Downarrow} nil; S_t' \\
+        S_f; F; M \vdash F \overset{C}{\Downarrow} nil; S_f'
+        \end{matrix}
+    }{
+        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow nil; S_c, S_t, S_f
+    }[\mathtt{Eval-ite-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S_c; F; M \vdash C \overset{C}{\Downarrow} nil; S_c' \\
+        S_t; F; M \vdash T \overset{C}{\Downarrow} nil; S_t' \\
+        S_f; F; M \vdash F \overset{C}{\Downarrow} nil; S_f'
+        \end{matrix}
+    }{
+        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \overset{C}{\Downarrow} nil; S_c, S_t, S_f
+    }[\mathtt{Eval-ite-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S_l; F; M \vdash E_l \Downarrow V; S_l' \\
+        V \neq nil \\
+        S_r; F; M \vdash E_r \overset{C}{\Downarrow} nil; S_r'
+        \end{matrix}
+    }{
+        false, S_l, S_r; F; M \vdash E_l \fby E_r \Downarrow V; true, S_l', S_r'
+    }[\mathtt{Eval-fby-before}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S_l; F; M \vdash E_l \Downarrow nil; S_l' \\
+        S_r; F; M \vdash E_r \overset{C}{\Downarrow} nil; S_r'
+        \end{matrix}
+    }{
+        false, S_l, S_r; F; M \vdash E_l \fby E_r \Downarrow nil; false, S_l', S_r'
+    }[\mathtt{Eval-fby-before-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S_l; F; M \vdash E_l \overset{C}{\Downarrow} nil; S_l' \\
+        S_r; F; M \vdash E_r \Downarrow V; S_r'
+        \end{matrix}
+    }{
+        true, S_l, S_r; F; M \vdash E_l \fby E_r \Downarrow V; true, S_l', S_r'
+    }[\mathtt{Eval-fby-after}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S_l; F; M \vdash E_l \overset{C}{\Downarrow} nil; S_l' \\
+        S_r; F; M \vdash E_r \overset{C}{\Downarrow} nil; S_r'
+        \end{matrix}
+    }{
+        c, S_l, S_r; F; M \vdash E_l \fby E_r \Downarrow nil; c, S_l', S_r'
+    }[\mathtt{Eval-fby-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        S_n; F; M \vdash E_n \overset{names}{\Rightarrow} F'; M'
+    }{
+        \left<v, \_ \right>, S_n; F; M \vdash n = E; E_n \overset{names}{\Rightarrow} F'; n \to v, M'
+    }[\mathtt{WhereNames-v-decl}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        S; f \to \left< A, E \right >, F; M \vdash E_v \overset{names}{\Rightarrow} F'; M'
+    }{
+        S; F; M \vdash f(A) = E; E_n \overset{names}{\Rightarrow} F'; M'
+    }[\mathtt{WhereNames-fn-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \gtypes; \Gamma; S; t \vdash \num(N) \Rightarrow Number; \gtypes
-    }[\mathtt{Synth-num}]
+        \emptyset; F; M \vdash \overset{names}{\Rightarrow} F'; M'
+    }[\mathtt{WhereNames-empty}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        s; F; M \vdash E \Downarrow v; s'
+        S_n; F; M \vdash E_n \overset{values}{\Rightarrow} S_n'
+    }{
+        \left<\_, s\right>, S_n; F; M \vdash n = E; E_n \overset{values}{\Rightarrow} \left<v, s'\right>, S_n'
+    }[\mathtt{WhereVal-v-decl}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        S; F; M \vdash E_n \overset{values}{\Rightarrow} S'
+    }{
+        S; F; M \vdash f(A) = E; E_n \overset{values}{\Rightarrow} S'
+    }[\mathtt{WhereVal-fn-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \gtypes; \Gamma; S; t \vdash \num(N) \overset{C}{\Rightarrow} 1; \gtypes
-    }[\mathtt{Synth-num-C}]
+        \emptyset; F; M \vdash \overset{values}{\Rightarrow} \emptyset
+    }[\mathtt{WhereVal-empty}]
     \end{align*}
     
     \begin{align*}
     \frac{
-        \Gamma(I) = T
+        \begin{matrix}
+        S; F; M \vdash E_s \overset{names}{\Rightarrow} F_i; M_i \\
+        S; F_i; M_i \vdash E_s \overset{values}{\Rightarrow} S' \\
+        S_e; F_i; M_i \vdash E \Downarrow V; S_e'        
+        \end{matrix}
     }{
-        \gtypes; \Gamma; S; t \vdash \id(I) \Rightarrow T; \gtypes
-    }[\mathtt{Synth-id}]
+        S_e, S; F; M \vdash E \where E_s \Downarrow V; S_e', S'
+    }[\mathtt{Eval-where}]
     \end{align*}
     
     \begin{align*}
     \frac{
-        \Gamma(I) = T
+        \begin{matrix}
+        S; F; M \vdash E_s \overset{names}{\Rightarrow} F_i; M_i \\
+        S; F_i; M_i \vdash E_s \overset{values}{\Rightarrow} S' \\
+        S_e; F_i; M_i \vdash E \overset{C}{\Downarrow} nil; S_e'        
+        \end{matrix}
     }{
-        \gtypes; \Gamma; S; t \vdash \id(I) \overset{C}{\Rightarrow} 1; \gtypes
-    }[\mathtt{Synth-id-C}]
+        S_e, S; F; M \vdash E \where E_s \overline{C}{\Downarrow} nil; S_e', S'
+    }[\mathtt{Eval-where-C}]
+    \end{align*}
+   
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \Downarrow V; S' \\
+        V \neq nil
+        \end{matrix}
+    }{
+        \left<false, nil \right>, S; F; M \vdash \nextop(E) \Downarrow nil; \left< true, V \right>, S'
+    }[\mathtt{Eval-next-before}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \Downarrow nil; S' \\
+        \end{matrix}
+    }{
+        \left<false, nil \right>, S; F; M \vdash \nextop(E) \Downarrow nil; \left< false, nil \right>, S'
+    }[\mathtt{Eval-next-before-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        v \neq nil \\
+        S; F; M \vdash E \Downarrow V; S'
+        \end{matrix}
+    }{
+        \left<true, v \right>, S; F; M \vdash \nextop(E) \Downarrow v; \left< true, V \right>, S'
+    }[\mathtt{Eval-next-after}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \Downarrow V; S'
+        \end{matrix}
+    }{
+        \left<true, nil \right>, S; F; M \vdash \nextop(E) \Downarrow V; \left< true, nil \right>, S'
+    }[\mathtt{Eval-next-after-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \overset{C}{\Downarrow} nil; S'
+        \end{matrix}
+    }{
+        \left<c, v\right>, S; F; M \vdash \nextop(E) \overset{C}{\Downarrow} nil; \left<c, v\right>, S'
+    }[\mathtt{Eval-next-C}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \gtypes; \Gamma; S; t \vdash \bool(B) \Rightarrow Boolean; \gtypes
-    }[\mathtt{Synth-boolean}]
+        \emptyset; F; M \vdash nil \Downarrow nil; \emptyset
+    }[\mathtt{Eval-nil}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \gtypes; \Gamma; S; t \vdash \bool(B) \overset{C}{\Rightarrow} 1; \gtypes
-    }[\mathtt{Synth-boolean-C}]
+        \emptyset; F; M \vdash nil \overset{C}{\Downarrow} nil; \emptyset
+    }[\mathtt{Eval-nil-C}]
     \end{align*}
-    
-    \section{Introduction}
-    
-    The evaluation rules of Pixy are split into two steps: construction and evaluation.
-    
-    First, any preprocessing is performed such as determining and allocating queue sizes or scanning for free variables.
-    
-    Then the evaluation rules are applied to the result of this step in order to execute the progam.
-    
-    \section{Utilities}
-    
-    \begin{align*}
-        \apply(E, nil) & = \exists v \in freevariables(E), \apply(E[v/nil], nil) \\
-        \apply(E, <>) & = E \\
-        \apply(E, <<n, v>, R...>) & = \apply(E[n/v], R)
-    \end{align*}
-    
-    \section{If}
-    
-    If has some quite interesting semantics - unlike in many languages it does not completely skip
-    the evaluation of the subexpression it does not select. Instead, it always executes both
-    subexpressions except that when a subexpression is not selected the inputs are replaced
-    by nil. This has the effect of synchronising time between both branches regardless of which
-    if chosen, while avoiding the catastrophically bad performance of actually providing data
-    for both branches to process.
-    
-    \subsection{Evaluation}
     
     \begin{align*}
     \frac{
-        \begin{matrix}
-        \Gamma_1 \vdash C \Rightarrow \Gamma_2 \vdash nil \\
-        \Gamma_2 \vdash \choke(T) \Rightarrow \Gamma_3 \vdash nil \\
-        \Gamma_3 \vdash \choke(F) \Rightarrow \Gamma_4 \vdash nil
-        \end{matrix}
+        N \in \numtype
     }{
-        \Gamma \vdash \ifop(C, T, F) \Rightarrow \Gamma_4 \vdash nil
-    }\mathtt{Eval-if-nil}
+        \emptyset; F; M \vdash N \Downarrow N; \emptyset
+    }[\mathtt{Eval-num}]
     \end{align*}
+    
     \begin{align*}
     \frac{
-        \begin{matrix}
-        \Gamma_1 \vdash C \Rightarrow \Gamma_2 \vdash true \\
-        \Gamma_2 \vdash T \Rightarrow \Gamma_3 \vdash V \\
-        \Gamma_3 \vdash \choke(F) \Rightarrow \Gamma_4 \vdash nil
-        \end{matrix}
+        N \in \numtype
     }{
-        \Gamma \vdash \ifop(C, T, F) \Rightarrow \Gamma_4 \vdash V
-    }\mathtt{Eval-if-true}
+        \emptyset; F; M \vdash N \overset{C}{\Downarrow} nil; \emptyset
+    }[\mathtt{Eval-num-C}]
     \end{align*}
+
     \begin{align*}
     \frac{
-        \begin{matrix}
-        \Gamma_1 \vdash C \Rightarrow \Gamma_2 \vdash false \\
-        \Gamma_2 \vdash \choke(T) \Rightarrow \Gamma_3 \vdash nil \\
-        \Gamma_3 \vdash F \Rightarrow \Gamma_4 \vdash V
-        \end{matrix}
+        M(I) = V
     }{
-        \Gamma \vdash \ifop(C, T, F) \Rightarrow \Gamma_4 \vdash V
-    }\mathtt{Eval-if-false}
+        \emptyset; F; M \vdash I \Downarrow V; \emptyset
+    }[\mathtt{Eval-id}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        M(I) = V
+    }{
+        \emptyset; F; M \vdash I \overset{C}{\Downarrow} nil; \emptyset
+    }[\mathtt{Eval-id-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        E \in \{true, false\}
+    }{
+        \emptyset; F; M \vdash E \Downarrow E; \emptyset
+    }[\mathtt{Eval-boolean}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        E \in \{true, false\}
+    }{
+        \emptyset; F; M \vdash E \overset{C}{\Downarrow} nil; \emptyset
+    }[\mathtt{Eval-boolean-C}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma_1 \vdash \choke(C) \Rightarrow \Gamma_2 \vdash nil \\
-        \Gamma_2 \vdash \choke(T) \Rightarrow \Gamma_3 \vdash nil \\
-        \Gamma_3 \vdash \choke(F) \Rightarrow \Gamma_4 \vdash nil
+        S; F; M \vdash E \Downarrow V; S' \\
+        A_n; S_n; F; M \vdash E_n \overset{arg}{\Rightarrow} M_i; S_n'
         \end{matrix}
     }{
-        \Gamma \vdash \ifop(C, T, F) \Rightarrow \Gamma_4 \vdash nil
-    }\mathtt{Choke-if}
+        A, A_n; S, S_n; F; M \vdash E, E_n \overset{arg}{\Rightarrow} A \to V, M_i; S', S_n'
+    }[\mathtt{Apply-arg}]
     \end{align*}
     
-    \subsection{Construction}
-    
     \begin{align*}
-    \frac{
-        \begin{matrix}
-        \Gamma |- S | C => \Gamma |- S_1 | C_{e} \\
-        \Gamma |- S_1 | Tsrc => \Gamma |- S_2 | T_{e} \\
-        \Gamma |- S_2 | Fsrc => \Gamma |- S_3 | F_{e}
-        \end{matrix}
-    }
-    {\Gamma |- S \left| \begin{matrix}
-        \ifop C \thenop T \\
-        \elseop F
-        \end{matrix} \right. =>
-        \begin{matrix}
-        \ifop(C_{expr}, <T_{expr}, T_{vars}>, <F_{expr}, F_{vars}>), \\
-        C_{vars} \cup T_{vars} \cup F_{vars}
-        \end{matrix}
-    }\mathtt{Construct-if}
-    \end{align*}
-    
-    \section{fby}
-    
-    \subsection{Evaluation}
-    
-    \begin{align*}
-    \frac{
-        S => false, L => nil, R => nil
-    }{
-        \fby(L, R, S, Q) => nil
-    }\mathtt{Eval-fby-1}
-    \end{align*}
-    \begin{align*}
-    \frac{
-        S => false, L => nil, R => R_{val}, R_{val} \neq nil, push(Q, R_{val})
-    }{
-        \fby(L, R, S, Q) => nil
-    }\mathtt{Eval-fby-2}
-    \end{align*}
-    \begin{align*}
-    \frac{
-        S => false, L => L_{val}, L_{val} \neq nil, R => R_{val}, R_{val} \neq nil, push(Q, R_{val}), set(S, true)
-    }{
-        \fby(L, R, S, Q) => L_{val}
-    }\mathtt{Eval-fby-3}
-    \end{align*}
-    \begin{align*}
-    \frac{
-        S => true, R => R_{val}, R_{val} \neq nil, \lnot empty(Q), push(Q, R_{val})
-    }{
-        \fby(L, R, S, Q) => pop(Q)
-    }\mathtt{Eval-fby-4}
-    \end{align*}
-    \begin{align*}
-    \frac{
-        S => true, R => R_{val}, R_{val} \neq nil, empty(Q)
-    }{
-        \fby(L, R, S, Q) => R_{val}
-    }\mathtt{Eval-fby-5}
-    \end{align*}
-    \begin{align*}
-    \frac{
-        S => true, R => nil, empty(Q)
-    }{
-        \fby(L, R, S, Q) => nil
-    }\mathtt{Eval-fby-6}
-    \end{align*}
-    \begin{align*}
-    \frac{
-        S => true, R => nil, \lnot empty(Q)
-    }{
-        \fby(L, R, S, Q) => pop(Q)
-    }\mathtt{Eval-fby-7}
+    \frac{}{
+        \emptyset; \emptyset; F; M \vdash \overset{arg}{\Rightarrow} \emptyset; \emptyset
+    }[\mathtt{Apply-arg-empty}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma \vdash \choke(L) \Rightarrow \Gamma_1 \vdash nil \\
-        \Gamma_1 \vdash \choke(R) \Rightarrow \Gamma_2 \vdash nil
+        S; F; M \vdash E \overset{C}{\Downarrow} nil; S' \\
+        A_n; S_n; F; M \vdash E_n \overset{argC}{\Rightarrow} M_i; S_n'
         \end{matrix}
     }{
-        \Gamma \vdash \fby(L, R, S, Q) \Rightarrow \Gamma_2 \vdash nil
-    }\mathtt{Choke-fby}
+        A, A_n; S, S_n; F; M \vdash E, E_n \overset{argC}{\Rightarrow} A \to nil, M_i; S', S_n'
+    }[\mathtt{Apply-arg-C}]
     \end{align*}
     
-    \subsection{Construction}
+    \begin{align*}
+    \frac{}{
+        \emptyset; \emptyset; F; M \vdash \overset{argC}{\Rightarrow} \emptyset; \emptyset
+    }[\mathtt{Apply-arg-empty-C}]
+    \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma |- S | L => \Gamma |- S_1 | L_{expr}, L_{vars} \\
-        \Gamma |- S_1 | R => \Gamma |- S_2 | R_{expr}, R_{vars} \\
-        d = maxdistance(L_{expr}, R_{expr}) \\
-        <Q_f, \Gamma'> = fresh(Q, \Gamma) \\
-        <P_f, \Gamma''> = fresh(P, \Gamma') \\
-        S_3 = alloc(d, Q_f, S_2) \\
-        S_4 = alloc(P_f, S_3) \\
+        F(f) = \left< A, E \right> \\
+        A; S; F; M \vdash a \overset{arg}{\Rightarrow} M_i; S' \\
+        S_e; F; M_i \vdash E \Downarrow V; S_e'
         \end{matrix}
     }{
-        \Gamma |- S | L \fby R => \Gamma'' |- S_4 | \fby(L_{expr}, R_{expr}, P_f, Q_f), L_{vars} \cup R_{vars}
-    }\mathtt{Construct-fby}
+        S_e, S; F; M \vdash f(a) \Downarrow V; S_e', S'
+    }[\mathtt{Eval-apply}]
     \end{align*}
-    
-    \section{check}
-    
-    \subsection{Evaluation}
-    
-    \begin{align*}
-        \frac{
-            E => nil
-        }{
-            \checkop(E) => false
-        }\mathtt{Eval-check-nil}
-    \end{align*}
-    \begin{align*}
-        \frac{
-            E => v, v \neq nil
-        }{
-            \checkop(E) => true
-        }\mathtt{Eval-check-other}
-    \end{align*}
-    
-    \begin{align*}
-        \frac{
-            \Gamma \vdash \choke(E) \Rightarrow \Gamma_1 \vdash nil
-        }{
-            \Gamma \vdash \checkop(E) \Rightarrow \Gamma_1 \vdash nil
-        }\mathtt{Choke-check}
-    \end{align*}
-    
-    \subsection{Construction}
-    
-    \begin{align*}
-        \frac{
-            \Gamma |- S | E => \Gamma |- S_1 | E_{expr}, E_{vars}
-        }{
-            \Gamma |- S | ?E => \checkop(E_{expr}), E_{vars}
-        }\mathtt{Construct-check}
-    \end{align*}
-    
-    \section{where}
-    
-    \subsection{Evaluation}
-    
-    \begin{align*}
-        \frac{
-            \foreach e_i => v_i..., set(n_i, v_i), E => V
-        }{
-            \where(E, <n_i, e_i>...) => V
-        }\mathtt{Eval-where}
-    \end{align*}
-    
-    \subsection{Construction}
     
     \begin{align*}
     \frac{
-            \begin{matrix}
-                <nf_i, \Gamma'> = fresh(n_i, \Gamma)... \\
-                S' = alloc(nf_i, S)...\\
-                E_s = E[n_i/nf_i...] \\
-                \Gamma' |- S' | E_s => \Gamma' |- S'_0 | E_{expr}, E_{vars} \\
-                es_i = e_i[n_i/nf_i...]... \\
-                \Gamma' |- S'_{i-1} | es_i => \Gamma' |- S'_i | e_{i, expr}, e_{i,vars}...
-            \end{matrix}
-        }{
-            \Gamma |- S \left| 
-            \begin{array}{l}
-                E \where \\
-                n_i = e_i; ... \\ 
-                end
-            \end{array}
-            \right. => \Gamma' |- S'_n \left| 
-            \begin{matrix}
-                \where(E_{expr}, <nf_i, e_{i, expr}>...), \\
-                E_{vars} \cup e_{i,vars}... \setminus \{nf_i...\}
-            \end{matrix}
-            \right.
-        }\mathtt{Construct-where}
+        \begin{matrix}
+        F(f) = \left< A, E \right> \\
+        A; S; F; M \vdash a \overset{argC}{\Rightarrow} M_i; S' \\
+        S_e; F; M_i \vdash E \overset{C}{\Downarrow} nil; S_e'
+        \end{matrix}
+    }{
+        S_e, S; F; M \vdash f(a) \Downarrow nil; S_e', S'
+    }[\mathtt{Eval-apply-C}]
     \end{align*}
     
-    \section{hold}
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        L, R \in \numtype \\
+        V = L + R
+        \end{matrix}
+    }{
+        L + R \overset{binop}{\Rightarrow} V
+    }[\mathtt{Binop-plus}]
+    \end{align*}
     
-    TODO: how to achieve nested iteration; current theory: specify a set of streams to sample
-    from and hold constant while the nested iteration finishes. ?
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        L, R \in \numtype \\
+        V = L - R
+        \end{matrix}
+    }{
+        L - R \overset{binop}{\Rightarrow} V
+    }[\mathtt{Binop-minus}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        L, R \in \numtype \\
+        V = L * R
+        \end{matrix}
+    }{
+        L * R \overset{binop}{\Rightarrow} V
+    }[\mathtt{Binop-times}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        L, R \in \numtype \\
+        V = L / R
+        \end{matrix}
+    }{
+        L / R \overset{binop}{\Rightarrow} V
+    }[\mathtt{Binop-divide}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S_l; F; M \vdash L_e \Downarrow L_v; S_l' \\
+        S_r; F; M \vdash R_e \Downarrow R_v; S_l' \\
+        L_v \enspace B \enspace R_v \overset{binop}{\Rightarrow} V
+        \end{matrix}
+    }{
+        S_l, S_r; F; M \vdash L_e \enspace B \enspace R_e \Downarrow V; S_l', S_r'
+    }[\mathtt{Eval-binop}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S_l; F; M \vdash L_e \overset{C}{\Downarrow} nil; S_l' \\
+        S_r; F; M \vdash R_e \overset{C}{\Downarrow} nil; S_l' \\
+        \end{matrix}
+    }{
+        S_l, S_r; F; M \vdash L_e \enspace B \enspace R_e \overset{C}{\Downarrow} nil; S_l', S_r'
+    }[\mathtt{Eval-binop-C}]
+    \end{align*}
     
 \end{document}
