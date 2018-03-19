@@ -1,5 +1,4 @@
-avg(x) = sum / count
+avg(x) = (sum / count)
     where
         count = 0 fby if ?x then count + 1 else count
-        sum = acc where
-            acc = 0 fby if ?x then acc + x else acc
+        sum = 0 fby if ?x then sum + x else sum

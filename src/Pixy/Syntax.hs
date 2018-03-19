@@ -6,6 +6,7 @@ data Statement = Print Expr
     deriving (Show)
 
 data Function = Function String [Var] Expr
+    deriving (Show)
 
 data BinOp
     = Plus
@@ -13,17 +14,17 @@ data BinOp
     | Times
     | Divide
     | Equals
-    deriving (Show)
+    deriving (Show, Eq)
 
 data Expr
     = Nil
     | Var Var
     | Const !Int
-    | Seq Statement Expr
+    | Exists Expr
     | If Expr Expr Expr
     | Fby Expr Expr
     | Where Expr [(Var, Expr)] 
     | App String [Expr]
     | BinExpr BinOp Expr Expr
-    deriving (Show)
+    deriving (Show, Eq)
     -- | Tuple [Expr]

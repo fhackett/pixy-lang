@@ -2,12 +2,30 @@ module Pixy.ParserSpec where
 
 import Test.Hspec
 import Pixy.Parser
+import Pixy.Syntax
 import System.Directory
 
 spec :: Spec
 spec = do
-    describe "Pixy.Parser" $ do
-        samples
+    simpleExprs
+    -- samples
+
+simpleExprs :: Spec
+simpleExprs = do
+    describe "Simple Expressions" $ do
+        addExpr
+        arithExpr
+
+addExpr :: Spec
+addExpr = do
+    it "add expression" $ do
+        runParser expr "<stdin>" "x + y" `shouldBe` (Right (BinExpr Plus (Var "x") (Var "y")))
+
+arithExpr :: Spec
+arithExpr = do
+    it "operator precedence" $ do
+        runParser expr "<stdin>" "x + 3*(y - 4)" `shouldBe` 
+            (Right (BinExpr Plus (Var "x") (BinExpr Times (Const 3) (BinExpr Minus (Var "y") (Const 4)))))
 
 samples :: Spec
 samples = do
@@ -17,14 +35,13 @@ samples = do
 
 sample :: String -> IO ()
 sample fname = do
-    putStrLn $ "Parsing File: " ++ fname
+    putStrLn $ "=====[Parsing File: " ++ fname ++ "]====="
     contents <- readFile fname
-    putStrLn "File Contents:"
     putStrLn contents
-    case runParser expr fname contents of
+    case runParser program fname contents of
         Left err -> expectationFailure err
         Right res -> do
-            putStrLn "Result:"
+            putStrLn "=====[Result]====="
             print res
 
 isLeft :: Either e a -> Bool
