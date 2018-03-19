@@ -47,7 +47,7 @@
     \section{Term language}
     
     \begin{grammar}
-        <expr> ::= <literal>
+        <expr> ::= <number>
             \alt <var>
             \alt "nil"
             \alt "?" <expr>
@@ -55,18 +55,23 @@
             \alt <expr> "fby" <expr>
             \alt <expr> "where" <wheredecls>
             \alt "next" <expr>
-            \alt <var> "(" <opargvals> ")"
+            \alt <var> "(" <exprlist> ")"
             \alt <expr> "+" <expr>
             \alt <expr> "-" <expr>
             \alt <expr> "*" <expr>
             \alt <expr> "/" <expr>
+            \alt <expr> ".." <expr>
+            \alt "(" <exprlist> ")"
+            \alt "len" <expr>
+            \alt "[" <exprlist> "]" <expr> 
         
-        <opargvals> ::= <expr> "," <opargvals> | <expr>
+        <exprlist> ::= <expr> "," <exprlist> | <expr>
         
-        <opargslist> ::= <var> "," <opargslist> | <var>
+        <varlist> ::= <var> "," <varlist> | <var>
         
         <wheredecl> ::= <var> "=" <expr> 
-            \alt <var> "(" <opargslist> ")" "=" <expr>
+            \alt <var> "(" <varlist> ")" "=" <expr>
+            \alt "(" <varlist> ")" "=" <expr>
             
         <wheredecls> ::= <wheredecl>; <wheredecls> | <wheredecl>
     \end{grammar}
@@ -115,33 +120,58 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        F \vdash E \overset{init}{\Rightarrow} s \\
-        F \vdash E_n \overset{whereinit}{\Rightarrow} S; F'
+        F \vdash E_n \overset{wheredecl}{\Rightarrow} F'
         \end{matrix}
     }{
-        F \vdash n = E; E_n \overset{whereinit}{\Rightarrow} \left<nil, s\right>, S; F'
+        F \vdash n = E; E_n \overset{wheredecl}{\Rightarrow} F'
     }[\mathtt{WhereInit-v-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{
-        F \vdash E_n \overset{whereinit}{\Rightarrow} S; F'
+        F \vdash E_n \overset{wheredecl}{\Rightarrow} F'
     }{
-        F \vdash f(A) = E; E_n \overset{whereinit}{\Rightarrow} S; f \to \left<A, E \right>, F'
+        F \vdash f(A) = E; E_n \overset{wheredecl}{\Rightarrow} f \to \left<A, E \right>, F'
     }[\mathtt{WhereInit-fn-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        F \vdash \overset{whereinit}{\Rightarrow} \emptyset; F
-    }[\mathtt{WhereInit-empty}]
+        F \vdash \overset{wheredecl}{\Rightarrow} F
+    }[\mathtt{WhereInit-empty-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        F \vdash E \overset{init}{\Rightarrow} S_e \\
-        F \vdash E_s \overset{whereinit}{\Rightarrow} S
+        F \vdash E \overset{init}{\Rightarrow} s \\
+        F \vdash E_n \overset{whereinit}{\Rightarrow} S
+        \end{matrix}
+    }{
+        F \vdash n = E; E_n \overset{whereinit}{\Rightarrow} \left<nil, s\right>, S
+    }[\mathtt{WhereInit-v-init}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        F \vdash E_n \overset{whereinit}{\Rightarrow} S
+    }{
+        F \vdash f(A) = E; E_n \overset{whereinit}{\Rightarrow} S
+    }[\mathtt{WhereInit-fn-init}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        F \vdash \overset{whereinit}{\Rightarrow} \emptyset
+    }[\mathtt{WhereInit-empty-init}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        F \vdash E_s \overset{wheredecl}{\Rightarrow} F' \\
+        F' \vdash E \overset{init}{\Rightarrow} S_e \\
+        F' \vdash E_s \overset{whereinit}{\Rightarrow} S
         \end{matrix}
     }{
         F \vdash E \where E_s \overset{init}{\Rightarrow} S_e, S
@@ -193,6 +223,10 @@
         F \vdash L \enspace \_ \enspace R \overset{init}{\Rightarrow} S_l, S_r
     }[\mathtt{Init-binop}]
     \end{align*}
+    
+    \section{Data type sizing}
+    
+    
 
     \section{Evaluation rules}
     
