@@ -35,6 +35,8 @@
 
 \DeclareMathOperator{\gtypes}{\Delta}
 
+\DeclareMathOperator{\ceval}{\overset{C}{\smash{\Downarrow}}}
+
 \makeindex
 
 \begin{document}
@@ -218,7 +220,7 @@
         \begin{matrix}
         S_c; F; M \vdash C \Downarrow true; S_c' \\
         S_t; F; M \vdash T \Downarrow V; S_t' \\
-        S_f; F; M \vdash F \overset{C}{\Downarrow} nil; S_f'
+        S_f; F; M \vdash F \ceval nil; S_f'
         \end{matrix}
     }{
         S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow V; S_c', S_t', S_f'
@@ -229,7 +231,7 @@
     \frac{
         \begin{matrix}
         S_c; F; M \vdash C \Downarrow false; S_c' \\
-        S_t; F; M \vdash T \overset{C}{\Downarrow} nil; S_t' \\
+        S_t; F; M \vdash T  \ceval nil; S_t' \\
         S_f; F; M \vdash F \Downarrow V; S_f'
         \end{matrix}
     }{
@@ -241,8 +243,8 @@
     \frac{
         \begin{matrix}
         S_c; F; M \vdash C \Downarrow nil; S_c' \\
-        S_t; F; M \vdash T \overset{C}{\Downarrow} nil; S_t' \\
-        S_f; F; M \vdash F \overset{C}{\Downarrow} nil; S_f'
+        S_t; F; M \vdash T  \ceval nil; S_t' \\
+        S_f; F; M \vdash F  \ceval nil; S_f'
         \end{matrix}
     }{
         S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \Downarrow nil; S_c', S_t', S_f'
@@ -252,12 +254,12 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        S_c; F; M \vdash C \overset{C}{\Downarrow} nil; S_c' \\
-        S_t; F; M \vdash T \overset{C}{\Downarrow} nil; S_t' \\
-        S_f; F; M \vdash F \overset{C}{\Downarrow} nil; S_f'
+        S_c; F; M \vdash C  \ceval nil; S_c' \\
+        S_t; F; M \vdash T  \ceval nil; S_t' \\
+        S_f; F; M \vdash F  \ceval nil; S_f'
         \end{matrix}
     }{
-        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F \overset{C}{\Downarrow} nil; S_c', S_t', S_f'
+        S_c, S_t, S_f; F; M \vdash \ifop C \thenop T \elseop F  \ceval nil; S_c', S_t', S_f'
     }[\mathtt{Eval-ite-C}]
     \end{align*}
     
@@ -266,7 +268,7 @@
         \begin{matrix}
         S_l; F; M \vdash E_l \Downarrow V; S_l' \\
         V \neq nil \\
-        S_r; F; M \vdash E_r \overset{C}{\Downarrow} nil; S_r'
+        S_r; F; M \vdash E_r  \ceval nil; S_r'
         \end{matrix}
     }{
         false, S_l, S_r; F; M \vdash E_l \fby E_r \Downarrow V; true, S_l', S_r'
@@ -277,7 +279,7 @@
     \frac{
         \begin{matrix}
         S_l; F; M \vdash E_l \Downarrow nil; S_l' \\
-        S_r; F; M \vdash E_r \overset{C}{\Downarrow} nil; S_r'
+        S_r; F; M \vdash E_r  \ceval nil; S_r'
         \end{matrix}
     }{
         false, S_l, S_r; F; M \vdash E_l \fby E_r \Downarrow nil; false, S_l', S_r'
@@ -287,7 +289,7 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        S_l; F; M \vdash E_l \overset{C}{\Downarrow} nil; S_l' \\
+        S_l; F; M \vdash E_l  \ceval nil; S_l' \\
         S_r; F; M \vdash E_r \Downarrow V; S_r'
         \end{matrix}
     }{
@@ -298,8 +300,8 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        S_l; F; M \vdash E_l \overset{C}{\Downarrow} nil; S_l' \\
-        S_r; F; M \vdash E_r \overset{C}{\Downarrow} nil; S_r'
+        S_l; F; M \vdash E_l  \ceval nil; S_l' \\
+        S_r; F; M \vdash E_r  \ceval nil; S_r'
         \end{matrix}
     }{
         c, S_l, S_r; F; M \vdash E_l \fby E_r \Downarrow nil; c, S_l', S_r'
@@ -368,10 +370,10 @@
         \begin{matrix}
         S; F; M \vdash E_s \overset{names}{\Rightarrow} F_i; M_i \\
         S; F_i; M_i \vdash E_s \overset{values}{\Rightarrow} S' \\
-        S_e; F_i; M_i \vdash E \overset{C}{\Downarrow} nil; S_e'        
+        S_e; F_i; M_i \vdash E  \ceval nil; S_e'        
         \end{matrix}
     }{
-        S_e, S; F; M \vdash E \where E_s \overline{C}{\Downarrow} nil; S_e', S'
+        S_e, S; F; M \vdash E \where E_s \ceval nil; S_e', S'
     }[\mathtt{Eval-where-C}]
     \end{align*}
    
@@ -383,7 +385,7 @@
         V \neq nil
         \end{matrix}
     }{
-        \left<false, nil \right>, S; F; M \vdash \nextop(E) \Downarrow nil; \left< true, V \right>, S'
+        \left<false, nil \right>, S; F; M \vdash \nextop E \Downarrow nil; \left< true, V \right>, S'
     }[\mathtt{Eval-next-before}]
     \end{align*}
     
@@ -393,7 +395,7 @@
         S; F; M \vdash E \Downarrow nil; S' \\
         \end{matrix}
     }{
-        \left<false, nil \right>, S; F; M \vdash \nextop(E) \Downarrow nil; \left< false, nil \right>, S'
+        \left<false, nil \right>, S; F; M \vdash \nextop E \Downarrow nil; \left< false, nil \right>, S'
     }[\mathtt{Eval-next-before-nil}]
     \end{align*}
     
@@ -404,7 +406,7 @@
         S; F; M \vdash E \Downarrow V; S'
         \end{matrix}
     }{
-        \left<true, v \right>, S; F; M \vdash \nextop(E) \Downarrow v; \left< true, V \right>, S'
+        \left<true, v \right>, S; F; M \vdash \nextop E  \Downarrow v; \left< true, V \right>, S'
     }[\mathtt{Eval-next-after}]
     \end{align*}
     
@@ -414,17 +416,17 @@
         S; F; M \vdash E \Downarrow V; S'
         \end{matrix}
     }{
-        \left<true, nil \right>, S; F; M \vdash \nextop(E) \Downarrow V; \left< true, nil \right>, S'
+        \left<true, nil \right>, S; F; M \vdash \nextop E  \Downarrow V; \left< true, nil \right>, S'
     }[\mathtt{Eval-next-after-nil}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        S; F; M \vdash E \overset{C}{\Downarrow} nil; S'
+        S; F; M \vdash E \ceval nil; S'
         \end{matrix}
     }{
-        \left<c, v\right>, S; F; M \vdash \nextop(E) \overset{C}{\Downarrow} nil; \left<c, v\right>, S'
+        \left<c, v\right>, S; F; M \vdash \nextop E   \ceval nil; \left<c, v\right>, S'
     }[\mathtt{Eval-next-C}]
     \end{align*}
     
@@ -436,7 +438,7 @@
     
     \begin{align*}
     \frac{}{
-        \emptyset; F; M \vdash nil \overset{C}{\Downarrow} nil; \emptyset
+        \emptyset; F; M \vdash nil  \ceval nil; \emptyset
     }[\mathtt{Eval-nil-C}]
     \end{align*}
     
@@ -452,7 +454,7 @@
     \frac{
         N \in \numtype
     }{
-        \emptyset; F; M \vdash N \overset{C}{\Downarrow} nil; \emptyset
+        \emptyset; F; M \vdash N  \ceval nil; \emptyset
     }[\mathtt{Eval-num-C}]
     \end{align*}
 
@@ -468,7 +470,7 @@
     \frac{
         M(I) = V
     }{
-        \emptyset; F; M \vdash I \overset{C}{\Downarrow} nil; \emptyset
+        \emptyset; F; M \vdash I  \ceval nil; \emptyset
     }[\mathtt{Eval-id-C}]
     \end{align*}
     
@@ -484,7 +486,7 @@
     \frac{
         E \in \{true, false\}
     }{
-        \emptyset; F; M \vdash E \overset{C}{\Downarrow} nil; \emptyset
+        \emptyset; F; M \vdash E  \ceval nil; \emptyset
     }[\mathtt{Eval-boolean-C}]
     \end{align*}
     
@@ -508,7 +510,7 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        S; F; M \vdash E \overset{C}{\Downarrow} nil; S' \\
+        S; F; M \vdash E  \ceval nil; S' \\
         A_n; S_n; F; M \vdash E_n \overset{argC}{\Rightarrow} M_i; S_n'
         \end{matrix}
     }{
@@ -539,7 +541,7 @@
         \begin{matrix}
         F(f) = \left< A, E \right> \\
         A; S; F; M \vdash a \overset{argC}{\Rightarrow} M_i; S' \\
-        S_e; F; M_i \vdash E \overset{C}{\Downarrow} nil; S_e'
+        S_e; F; M_i \vdash E  \ceval nil; S_e'
         \end{matrix}
     }{
         S_e, S; F; M \vdash f(a) \Downarrow nil; S_e', S'
@@ -605,11 +607,11 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        S_l; F; M \vdash L_e \overset{C}{\Downarrow} nil; S_l' \\
-        S_r; F; M \vdash R_e \overset{C}{\Downarrow} nil; S_l' \\
+        S_l; F; M \vdash L_e  \ceval nil; S_l' \\
+        S_r; F; M \vdash R_e  \ceval nil; S_l' \\
         \end{matrix}
     }{
-        S_l, S_r; F; M \vdash L_e \enspace B \enspace R_e \overset{C}{\Downarrow} nil; S_l', S_r'
+        S_l, S_r; F; M \vdash L_e \enspace B \enspace R_e  \ceval nil; S_l', S_r'
     }[\mathtt{Eval-binop-C}]
     \end{align*}
     
