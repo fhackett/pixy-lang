@@ -1,3 +1,6 @@
+.stack-work/
+pixy.cabal
+*~
 *.aux
 *.idx
 *.log
