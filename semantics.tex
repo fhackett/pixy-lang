@@ -47,10 +47,7 @@
             \alt <expr> "-" <expr>
             \alt <expr> "*" <expr>
             \alt <expr> "/" <expr>
-            \alt <expr> ".." <expr>
-            \alt "(" <exprlist> ")"
-            \alt "len" <expr>
-            \alt "[" <exprlist> "]" <expr> 
+            \alt "(" <exprlist> ( "|" <expr> )? ")"
         
         <exprlist> ::= <expr> "," <exprlist> | <expr>
         
@@ -58,7 +55,7 @@
         
         <wheredecl> ::= <var> "=" <expr> 
             \alt <var> "(" <varlist> ")" "=" <expr>
-            \alt "(" <varlist> ")" "=" <expr>
+            \alt "(" <varlist> ( "|" <var> )? ")" "=" <expr>
             
         <wheredecls> ::= <wheredecl>; <wheredecls> | <wheredecl>
         
@@ -118,6 +115,37 @@
     
     \begin{align*}
     \frac{
+        n_s \overset{wheredecltuple}{\Rightarrow} M
+    }{
+        n, n_s \overset{wheredecltuple}{\Rightarrow} n \to (), M
+    }[\mathtt{WhereInit-tuple-decl-body}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        | \enspace n \overset{wheredecltuple}{\Rightarrow} n \to ()
+    }[\mathtt{WhereInit-tuple-decl-tail}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \overset{wheredecltuple}{\Rightarrow} \emptyset
+    }[\mathtt{WhereInit-tuple-decl-empty}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        n_s \overset{wheredecltuple}{\Rightarrow} M_s \\
+        F; M; F_f \vdash E_n \overset{wheredecl}{\Rightarrow} F'; M'
+        \end{matrix}
+    }{
+        F; M; F_f \vdash ( n_s ) = E; E_n \overset{wheredecl}{\Rightarrow} F'; M_s, M'
+    }[\mathtt{WhereInit-tuple-decl}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
         F; M; F_f \vdash E_n \overset{wheredecl}{\Rightarrow} F'; M'
     }{
         F; M; F_f \vdash f(A) = E; E_n \overset{wheredecl}{\Rightarrow} f \to \left<A, E, F_f \right>, F'; M'
@@ -139,6 +167,18 @@
     }{
         F; M \vdash n = E; E_n \overset{whereinit}{\Rightarrow} \left<nil, s\right>, S
     }[\mathtt{WhereInit-v-init}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        F; M \vdash E \overset{init}{\Rightarrow} s \\
+        n_s \overset{niltuple}{\Rightarrow} S_s \\
+        F; M \vdash E_n \overset{whereinit}{\Rightarrow} S
+        \end{matrix}
+    }{
+        F; M \vdash ( n_s ) = E; E_n \overset{whereinit}{\Rightarrow} \left<S_s, s\right>, S
+    }[\mathtt{WhereInit-tuple-init}]
     \end{align*}
     
     \begin{align*}
@@ -222,6 +262,41 @@
     }{
         F; M \vdash L \enspace \_ \enspace R \overset{init}{\Rightarrow} S_l, S_r
     }[\mathtt{Init-binop}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        F; M \vdash E \overset{init}{\Rightarrow} S \\
+        F; M \vdash E_n \overset{inittuple}{\Rightarrow} S_n
+        \end{matrix}
+    }{
+        F; M \vdash E, E_n \overset{inittuple}{\Rightarrow} S, S_n
+    }[\mathtt{Tuple-state}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        F; M \vdash E \overset{init}{\Rightarrow} S
+        \end{matrix}
+    }{
+        F; M \vdash | \enspace E \overset{inittuple}{\Rightarrow} S
+    }[\mathtt{Tuple-state-tail}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        F; M \vdash \overset{inittuple}{\Rightarrow} \emptyset
+    }[\mathtt{Tuple-state-empty}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        F; M \vdash E_s \overset{inittuple}{\Rightarrow} S
+    }{
+        F; M \vdash ( E_s ) \overset{init}{\Rightarrow} S
+    }[\mathtt{Init-tuple}]
     \end{align*}
     
     \section{Data type sizing}
@@ -352,6 +427,37 @@
     
     \begin{align*}
     \frac{
+        S_n; M \vdash n_n \overset{readtuple}{\Rightarrow} M'
+    }{
+        v, S_n; M \vdash n, n_n \overset{readtuple}{\Rightarrow} n \to v, M'
+    }[\mathtt{WhereNames-tuple-decl-read}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        v_s; M \vdash | \enspace n \overset{readtuple}{\Rightarrow} n \to (v_s), M
+    }[\mathtt{WhereNames-tuple-decl-read-tail}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \emptyset; M \vdash \overset{readtuple}{\Rightarrow} M
+    }[\mathtt{WhereNames-tuple-decl-read-empty}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; M \vdash n_s \overset{readtuple}{\Rightarrow} M_s \\
+        S_n; F; M; F_f \vdash E_n \overset{names}{\Rightarrow} F'; M'
+        \end{matrix}
+    }{
+        \left<S, \_ \right>, S_n; F; M \vdash (n_s) = E; E_n \overset{names}{\Rightarrow} F'; M_s, M'
+    }[\mathtt{WhereNames-tuple-decl}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
         S; F; M; F_f \vdash E_v \overset{names}{\Rightarrow} F'; M'
     }{
         S; F; M \vdash f(A) = E; E_n \overset{names}{\Rightarrow} f \to \left< A, E, F_f \right >, F'; M'
@@ -366,11 +472,56 @@
     
     \begin{align*}
     \frac{
-        s; F; M \vdash E \Downarrow v; s'
+        \begin{matrix}
+        s; F; M \vdash E \Downarrow v; s' \\
         S_n; F; M \vdash E_n \overset{values}{\Rightarrow} S_n'
+        \end{matrix}
     }{
         \left<\_, s\right>, S_n; F; M \vdash n = E; E_n \overset{values}{\Rightarrow} \left<v, s'\right>, S_n'
     }[\mathtt{WhereVal-v-decl}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \Downarrow ( V_s ); S' \\
+        S_n; F; M \vdash E_n \overset{values}{\Rightarrow} S_n'
+        \end{matrix}
+    }{
+        \left<\_, S\right>, S_n; F; M \vdash ( \_ ) = E; E_n \overset{values}{\Rightarrow} \left< V_s, S' \right>, S_n'
+    }[\mathtt{WhereVal-tuple-decl}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        n_n \overset{niltuple}{\Rightarrow} S_n
+    }{
+        n, n_n \overset{niltuple}{\Rightarrow} nil, S_n
+    }[\mathtt{NilTuple-body}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        | \enspace n \overset{niltuple}{\Rightarrow} nil
+    }[\mathtt{NilTuple-tail}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \overset{niltuple}{\Rightarrow} \emptyset
+    }[\mathtt{NilTuple-empty}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \Downarrow nil; S' \\
+        N_s \overset{niltuple}{\Rightarrow} V_s \\
+        S_n; F; M \vdash E_n \overset{values}{\Rightarrow} S_n'
+        \end{matrix}
+    }{
+        \left<\_, S\right>, S_n; F; M \vdash ( N_s ) = E; E_n \overset{values}{\Rightarrow} \left< V_s, S' \right>, S_n'
+    }[\mathtt{WhereVal-tuple-decl-nil}]
     \end{align*}
     
     \begin{align*}
@@ -653,10 +804,110 @@
     
     \begin{align*}
     \frac{
-        a
+        \begin{matrix}
+        E_n \overset{len}{\Rightarrow} N \\
+        C = N+1
+        \end{matrix}
     }{
-        \emptyset; F; M \vdash \lenop E
-    }
+        \_, E_n \overset{len}{\Rightarrow} C
+    }[\mathtt{Len-count}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \overset{len}{\Rightarrow} 0
+    }[\mathtt{Len-count-0}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \Downarrow ( V_s ); S' \\
+        V_s \overset{len}{\Rightarrow} N
+        \end{matrix}
+    }{
+        S; F; M \vdash \lenop E \Downarrow N; S'
+    }[\mathtt{Eval-len}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \ceval nil; S'
+        \end{matrix}
+    }{
+        S; F; M \vdash \lenop E \ceval nil; S'
+    }[\mathtt{Eval-len-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \Downarrow V; S' \\
+        S_n; F; M \vdash E_n \overset{tuplecons}{\Rightarrow} V_n; S_n'
+        \end{matrix}
+    }{
+        S, S_n; F; M \vdash E, E_n \overset{tuplecons}{\Rightarrow} V, V_n; S', S_n'
+    }[\mathtt{Tuple-construct}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \emptyset; F; M \vdash \overset{tuplecons}{\Rightarrow} \emptyset; \emptyset
+    }[\mathtt{Tuple-construct-empty}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        S; F; M \vdash E \overset{tuplecons}{\Rightarrow} ( V_s ); S'
+    }{
+        S; F; M \vdash | \enspace E \overset{tuplecons}{\Rightarrow} V_s; S'
+    }[\mathtt{Tuple-construct-tail}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E_s \overset{tuplecons}{\Rightarrow} V_s; S'
+        \end{matrix}
+    }{
+        S; F; M \vdash ( E_s ) \Downarrow ( V_s ); S'
+    }[\mathtt{Eval-tuple}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E \ceval nil; S' \\
+        S_n; F; M \vdash E_n \overset{tupleconsC}{\Rightarrow} S_n'
+        \end{matrix}
+    }{
+        S, S_n; F; M \vdash E, E_n \overset{tupleconsC}{\Rightarrow} S', S_n'
+    }[\mathtt{Tuple-construct-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \emptyset; F; M \vdash \overset{tupleconsC}{\Rightarrow} \emptyset
+    }[\mathtt{Tuple-construct-empty-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        S; F; M \vdash E \ceval nil; S'
+    }{
+        S; F; M \vdash | E \overset{tupleconsC}{\Rightarrow} S'
+    }[\mathtt{Tuple-construct-tail-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        S; F; M \vdash E_s \overset{tupleconsC}{\Rightarrow} S'
+        \end{matrix}
+    }{
+        S; F; M \vdash ( E_s ) \ceval nil; S'
+    }[\mathtt{Eval-tuple-C}]
     \end{align*}
     
 \end{document}
