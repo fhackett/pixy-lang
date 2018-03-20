@@ -77,3 +77,20 @@ Combining asynchronous values would fail to compile unless an appropriate synchr
 
 Resource management has yet to be considered in any detail.
 
+# Prototype Implementation
+
+Building
+```
+stack build
+```
+
+Executing
+```
+stack exec pixy-exe <filename>
+```
+
+Testing
+```
+stack test
+```
+
