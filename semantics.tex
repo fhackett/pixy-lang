@@ -10,30 +10,16 @@
 
 \usepackage{syntax}
 
-\DeclareMathOperator{\apply}{apply}
 \DeclareMathOperator{\ifop}{if}
 \DeclareMathOperator{\thenop}{then}
 \DeclareMathOperator{\elseop}{else}
-\DeclareMathOperator{\checkop}{check}
+\DeclareMathOperator{\lenop}{len}
+\DeclareMathOperator{\nil}{nil}
 \DeclareMathOperator{\fby}{fby}
 \DeclareMathOperator{\where}{where}
-\DeclareMathOperator{\choke}{choke}
-\DeclareMathOperator{\foreach}{\mathbf{foreach}}
-
-\DeclareMathOperator{\ident}{\mathbf{ident}}
-
-\DeclareMathOperator{\ite}{ite}
 \DeclareMathOperator{\nextop}{next}
-\DeclareMathOperator{\num}{num}
-\DeclareMathOperator{\id}{id}
-\DeclareMathOperator{\bool}{bool}
-
-\DeclareMathOperator{\compat}{\mathbf{compat}}
-\DeclareMathOperator{\canon}{\mathbf{canon}}
 
 \DeclareMathOperator{\numtype}{\mathbb{R}}
-
-\DeclareMathOperator{\gtypes}{\Delta}
 
 \DeclareMathOperator{\ceval}{\overset{C}{\smash{\Downarrow}}}
 
@@ -49,6 +35,7 @@
     \begin{grammar}
         <expr> ::= <number>
             \alt <var>
+            \alt <bool>
             \alt "nil"
             \alt "?" <expr>
             \alt "if" <expr> "then" <expr> "else" <expr>
@@ -74,153 +61,167 @@
             \alt "(" <varlist> ")" "=" <expr>
             
         <wheredecls> ::= <wheredecl>; <wheredecls> | <wheredecl>
+        
+        <bool> ::= "true" | "false"
     \end{grammar}
 
     \section{Init rules}
     
     \begin{align*}
     \frac{
-        F \vdash E \overset{init}{\Rightarrow} S
+        F; M \vdash E \overset{init}{\Rightarrow} S
     }{
-        F \vdash ?E \overset{init}{\Rightarrow} S
+        F; M \vdash ?E \overset{init}{\Rightarrow} S
     }[\mathtt{Init-check}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        F \vdash L \overset{init}{\Rightarrow} S_l \\
-        F \vdash R \overset{init}{\Rightarrow} S_r
+        F; M \vdash L \overset{init}{\Rightarrow} S_l \\
+        F; M \vdash R \overset{init}{\Rightarrow} S_r
         \end{matrix}
     }{
-        F \vdash L \fby R \overset{init}{\Rightarrow} false, S_l, S_r
+        F; M \vdash L \fby R \overset{init}{\Rightarrow} false, S_l, S_r
     }[\mathtt{Init-fby}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        F \vdash C \overset{init}{\Rightarrow} S_c \\
-        F \vdash T \overset{init}{\Rightarrow} S_t \\
-        F \vdash F \overset{init}{\Rightarrow} S_f
+        F; M \vdash C \overset{init}{\Rightarrow} S_c \\
+        F; M \vdash T \overset{init}{\Rightarrow} S_t \\
+        F; M \vdash F \overset{init}{\Rightarrow} S_f
         \end{matrix}
     }{
-        F \vdash \ifop C \thenop T \elseop F \overset{init}{\Rightarrow} S_c, S_t, S_f
+        F; M \vdash \ifop C \thenop T \elseop F \overset{init}{\Rightarrow} S_c, S_t, S_f
     }[\mathtt{Init-ite}]
     \end{align*}
     
     \begin{align*}
     \frac{
-        F \vdash E \overset{init}{\Rightarrow} S
+        F; M \vdash E \overset{init}{\Rightarrow} S
     }{
-        F \vdash \nextop E \overset{init}{\Rightarrow} false, S
+        F; M \vdash \nextop E \overset{init}{\Rightarrow} false, S
     }[\mathtt{Init-next}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        F \vdash E_n \overset{wheredecl}{\Rightarrow} F'
+        F; M; F_f; M_f \vdash E_n \overset{wheredecl}{\Rightarrow} F'; M'
         \end{matrix}
     }{
-        F \vdash n = E; E_n \overset{wheredecl}{\Rightarrow} F'
+        F; M; F_f; M_f \vdash n = E; E_n \overset{wheredecl}{\Rightarrow} F'; n \to \left< E, M_f \right>, M'
     }[\mathtt{WhereInit-v-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{
-        F \vdash E_n \overset{wheredecl}{\Rightarrow} F'
+        F; M; F_f; M_f \vdash E_n \overset{wheredecl}{\Rightarrow} F'; M'
     }{
-        F \vdash f(A) = E; E_n \overset{wheredecl}{\Rightarrow} f \to \left<A, E \right>, F'
+        F; M; F_f; M_f \vdash f(A) = E; E_n \overset{wheredecl}{\Rightarrow} f \to \left<A, E, F_f \right>, F'; M'
     }[\mathtt{WhereInit-fn-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        F \vdash \overset{wheredecl}{\Rightarrow} F
+        F; M; F_f; M_f \vdash \overset{wheredecl}{\Rightarrow} F; M
     }[\mathtt{WhereInit-empty-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        F \vdash E \overset{init}{\Rightarrow} s \\
-        F \vdash E_n \overset{whereinit}{\Rightarrow} S
+        F; M \vdash E \overset{init}{\Rightarrow} s \\
+        F; M \vdash E_n \overset{whereinit}{\Rightarrow} S
         \end{matrix}
     }{
-        F \vdash n = E; E_n \overset{whereinit}{\Rightarrow} \left<nil, s\right>, S
+        F; M \vdash n = E; E_n \overset{whereinit}{\Rightarrow} \left<nil, s\right>, S
     }[\mathtt{WhereInit-v-init}]
     \end{align*}
     
     \begin{align*}
     \frac{
-        F \vdash E_n \overset{whereinit}{\Rightarrow} S
+        F; M \vdash E_n \overset{whereinit}{\Rightarrow} S
     }{
-        F \vdash f(A) = E; E_n \overset{whereinit}{\Rightarrow} S
+        F; M \vdash f(A) = E; E_n \overset{whereinit}{\Rightarrow} S
     }[\mathtt{WhereInit-fn-init}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        F \vdash \overset{whereinit}{\Rightarrow} \emptyset
+        F; M \vdash \overset{whereinit}{\Rightarrow} \emptyset
     }[\mathtt{WhereInit-empty-init}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        F \vdash E_s \overset{wheredecl}{\Rightarrow} F' \\
-        F' \vdash E \overset{init}{\Rightarrow} S_e \\
-        F' \vdash E_s \overset{whereinit}{\Rightarrow} S
+        F; M; F'; M' \vdash E_s \overset{wheredecl}{\Rightarrow} F''; M'' \\
+        F' = F'' \\
+        M' = M'' \\
+        F'; M' \vdash E \overset{init}{\Rightarrow} S_e \\
+        F'; M' \vdash E_s \overset{whereinit}{\Rightarrow} S
         \end{matrix}
     }{
-        F \vdash E \where E_s \overset{init}{\Rightarrow} S_e, S
+        F; M \vdash E \where E_s \overset{init}{\Rightarrow} S_e, S
     }[\mathtt{Init-where}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        F \vdash A \overset{init}{\Rightarrow} S \\
-        F \vdash A_n \overset{applyinit}{\Rightarrow} S_n
+        F; M \vdash E_a \overset{init}{\Rightarrow} S \\
+        A_n; F; M \vdash E_{a_n} \overset{applyinit}{\Rightarrow} S_n; M_i
         \end{matrix}
     }{
-        F \vdash A, A_n \overset{applyinit}{\Rightarrow} S, S_n
+        A, A_n; F; M \vdash E_a, E_{a_n} \overset{applyinit}{\Rightarrow} S, S_n; A \to \left< E_a, M \right>, M_i
     }[\mathtt{ApplyInit-arg}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        F \vdash \overset{applyinit}{\Rightarrow} \emptyset
+        F; M \vdash \overset{applyinit}{\Rightarrow} \emptyset; \emptyset
     }[\mathtt{ApplyInit-empty}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        F(f) = \left< \_, E \right> \\
-        F \vdash E \overset{init}{\Rightarrow} S_e \\
-        F \vdash A \overset{applyinit}{\Rightarrow} S
+        F(f) = \left< A, E, F_i \right> \\
+        A; F; M \vdash E_a \overset{applyinit}{\Rightarrow} S; M_i \\
+        F_i; M_i \vdash E \overset{init}{\Rightarrow} S_e
         \end{matrix}
     }{
-        F \vdash f(A) \overset{init}{\Rightarrow} S_e, S
+        F; M \vdash f(E_a) \overset{init}{\Rightarrow} S_e, S
     }[\mathtt{Init-apply}]
     \end{align*}
     
     \begin{align*}
-    \frac{}{
-        F \vdash \_ \overset{init}{\Rightarrow} \emptyset
+    \frac{
+        E \in \{ true, false \} \lor E \in \numtype
+    }{
+        F; M \vdash E \overset{init}{\Rightarrow} \emptyset
     }[\mathtt{Init-literal}]
     \end{align*}
     
     \begin{align*}
     \frac{
+        M(E) = \_
+    }{
+        F; M \vdash E \overset{init}{\Rightarrow} \emptyset
+    }[\mathtt{Init-id}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
         \begin{matrix}
-        F \vdash L \overset{init}{\Rightarrow} S_l \\
-        F \vdash R \overset{init}{\Rightarrow} S_r
+        F; M \vdash L \overset{init}{\Rightarrow} S_l \\
+        F; M \vdash R \overset{init}{\Rightarrow} S_r
         \end{matrix}
     }{
-        F \vdash L \enspace \_ \enspace R \overset{init}{\Rightarrow} S_l, S_r
+        F; M \vdash L \enspace \_ \enspace R \overset{init}{\Rightarrow} S_l, S_r
     }[\mathtt{Init-binop}]
     \end{align*}
     
@@ -344,7 +345,7 @@
     
     \begin{align*}
     \frac{
-        S_n; F; M \vdash E_n \overset{names}{\Rightarrow} F'; M'
+        S_n; F; M; F_f \vdash E_n \overset{names}{\Rightarrow} F'; M'
     }{
         \left<v, \_ \right>, S_n; F; M \vdash n = E; E_n \overset{names}{\Rightarrow} F'; n \to v, M'
     }[\mathtt{WhereNames-v-decl}]
@@ -352,15 +353,15 @@
     
     \begin{align*}
     \frac{
-        S; f \to \left< A, E \right >, F; M \vdash E_v \overset{names}{\Rightarrow} F'; M'
+        S; F; M; F_f \vdash E_v \overset{names}{\Rightarrow} F'; M'
     }{
-        S; F; M \vdash f(A) = E; E_n \overset{names}{\Rightarrow} F'; M'
+        S; F; M \vdash f(A) = E; E_n \overset{names}{\Rightarrow} f \to \left< A, E, F_f \right >, F'; M'
     }[\mathtt{WhereNames-fn-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{}{
-        \emptyset; F; M \vdash \overset{names}{\Rightarrow} F'; M'
+        \emptyset; F; M; F_f \vdash \overset{names}{\Rightarrow} F'; M'
     }[\mathtt{WhereNames-empty}]
     \end{align*}
     
@@ -390,7 +391,8 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        S; F; M \vdash E_s \overset{names}{\Rightarrow} F_i; M_i \\
+        S; F; M; F_f \vdash E_s \overset{names}{\Rightarrow} F_i; M_i \\
+        F_f = F_i \\
         S; F_i; M_i \vdash E_s \overset{values}{\Rightarrow} S' \\
         S_e; F_i; M_i \vdash E \Downarrow V; S_e'        
         \end{matrix}
@@ -402,7 +404,8 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        S; F; M \vdash E_s \overset{names}{\Rightarrow} F_i; M_i \\
+        S; F; M; F_f \vdash E_s \overset{names}{\Rightarrow} F_i; M_i \\
+        F_f = F_i \\
         S; F_i; M_i \vdash E_s \overset{values}{\Rightarrow} S' \\
         S_e; F_i; M_i \vdash E  \ceval nil; S_e'        
         \end{matrix}
@@ -561,9 +564,9 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        F(f) = \left< A, E \right> \\
+        F(f) = \left< A, E, F_i \right> \\
         A; S; F; M \vdash a \overset{arg}{\Rightarrow} M_i; S' \\
-        S_e; F; M_i \vdash E \Downarrow V; S_e'
+        S_e; F_i; M_i \vdash E \Downarrow V; S_e'
         \end{matrix}
     }{
         S_e, S; F; M \vdash f(a) \Downarrow V; S_e', S'
@@ -573,9 +576,9 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        F(f) = \left< A, E \right> \\
+        F(f) = \left< A, E, F_i \right> \\
         A; S; F; M \vdash a \overset{argC}{\Rightarrow} M_i; S' \\
-        S_e; F; M_i \vdash E  \ceval nil; S_e'
+        S_e; F_i; M_i \vdash E \ceval nil; S_e'
         \end{matrix}
     }{
         S_e, S; F; M \vdash f(a) \Downarrow nil; S_e', S'
@@ -647,6 +650,14 @@
     }{
         S_l, S_r; F; M \vdash L_e \enspace B \enspace R_e  \ceval nil; S_l', S_r'
     }[\mathtt{Eval-binop-C}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        a
+    }{
+        \emptyset; F; M \vdash \lenop E
+    }
     \end{align*}
     
 \end{document}
