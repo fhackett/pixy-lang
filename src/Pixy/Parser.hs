@@ -27,8 +27,8 @@ value = P.choice
     , (VInt . fromIntegral) <$> integer
     ]
 
-expr' :: Parser Expr
-expr' = P.choice
+term :: Parser Expr
+term = P.choice
     [ P.try $ App <$> identifier <*> (parens (P.sepBy expr comma))
     , Var <$> identifier
     , Const <$> value
@@ -46,17 +46,21 @@ operators =
     , [ binary "==" (Binop Equals) ]
     , [ binary "fby" Fby ]
     , [ prefix "?" Check ]
-    , [ P.Postfix _where ]
+    -- , [ P.Postfix _where ]
     ]
     where
         binary name f = P.InfixL (f <$ symbol name)
         prefix name f = P.Prefix (f <$ symbol name)
-        _where = L.indentBlock scn $ do
-            reserved "where"
-            return (L.IndentSome Nothing (return . (flip Where)) ((,) <$> identifier <*> (symbol "=" *> expr)))
+
+expr' :: Parser Expr
+expr' = P.makeExprParser term operators
 
 expr :: Parser Expr
-expr = P.makeExprParser expr' operators
+expr = expr' >>= (\e -> P.try (_where e) <|> return e)
+    where
+        _where e = L.indentBlock scn $ do
+            reserved "where"
+            return (L.IndentSome Nothing (return . Where e) ((,) <$> identifier <*> (symbol "=" *> expr)))
 
 program :: Parser [Function]
 program = P.many function
