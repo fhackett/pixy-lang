@@ -109,18 +109,18 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        F; M; F_f; M_f \vdash E_n \overset{wheredecl}{\Rightarrow} F'; M'
+        F; M; F_f \vdash E_n \overset{wheredecl}{\Rightarrow} F'; M'
         \end{matrix}
     }{
-        F; M; F_f; M_f \vdash n = E; E_n \overset{wheredecl}{\Rightarrow} F'; n \to \left< E, M_f \right>, M'
+        F; M; F_f \vdash n = E; E_n \overset{wheredecl}{\Rightarrow} F'; n \to (), M'
     }[\mathtt{WhereInit-v-decl}]
     \end{align*}
     
     \begin{align*}
     \frac{
-        F; M; F_f; M_f \vdash E_n \overset{wheredecl}{\Rightarrow} F'; M'
+        F; M; F_f \vdash E_n \overset{wheredecl}{\Rightarrow} F'; M'
     }{
-        F; M; F_f; M_f \vdash f(A) = E; E_n \overset{wheredecl}{\Rightarrow} f \to \left<A, E, F_f \right>, F'; M'
+        F; M; F_f \vdash f(A) = E; E_n \overset{wheredecl}{\Rightarrow} f \to \left<A, E, F_f \right>, F'; M'
     }[\mathtt{WhereInit-fn-decl}]
     \end{align*}
     
@@ -158,9 +158,8 @@
     \begin{align*}
     \frac{
         \begin{matrix}
-        F; M; F'; M' \vdash E_s \overset{wheredecl}{\Rightarrow} F''; M'' \\
+        F; M; F' \vdash E_s \overset{wheredecl}{\Rightarrow} F'' \\
         F' = F'' \\
-        M' = M'' \\
         F'; M' \vdash E \overset{init}{\Rightarrow} S_e \\
         F'; M' \vdash E_s \overset{whereinit}{\Rightarrow} S
         \end{matrix}
