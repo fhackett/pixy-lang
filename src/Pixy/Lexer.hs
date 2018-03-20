@@ -85,5 +85,7 @@ reservedWords =
     , "if"
     , "then"
     , "else"
+    , "true"
+    , "false"
     ]
 

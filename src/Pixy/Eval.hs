@@ -11,6 +11,8 @@ import qualified Data.Map.Strict as Map
 import Data.List (find)
 import Data.Map (Map)
 import System.Exit
+--DEBUGGING
+import Debug.Trace
 
 {-
 The pixy evaluation model is as follows:
@@ -26,12 +28,8 @@ data EvalError
     | BooleanExpected Value
     | NilExpected Value
     | OperandMismatch Binop Value Value
+    | DivideByZero
     deriving (Show)
-
-{-
-We need to do 2 passes, one to build the set of bindings
-The other to initialize the state of every stream
--}
 
 init :: (MonadReader [Function] m, MonadError EvalError m) => Expr -> m ExprS
 init (Var x) = return $ VarS x
@@ -120,7 +118,9 @@ eval (BinopS op l r) = do
         (Plus, VInt i, VInt j) -> return $ VInt (i + j)
         (Minus, VInt i, VInt j) -> return $ VInt (i - j)
         (Times, VInt i, VInt j) -> return $ VInt (i * j)
-        (Divide, VInt i, VInt j) -> return $ VInt (i `div` j)
+        (Divide, VInt i, VInt j)  -> 
+            if j /= 0 then return $ VInt (i `div` j) 
+            else throwError $ DivideByZero
         (Equals, VInt i, VInt j) -> return $ VBool (i == j)
         (op, lVal, rVal) -> throwError $ OperandMismatch op lVal rVal
     return (BinopS op l' r', resVal)
@@ -156,21 +156,20 @@ chokeEval e = do
             choked :: (Functor f) => f ExprS -> f (ExprS, Value)
             choked = fmap (,VNil)
 
-type Eval r = ReaderT r (ExceptT EvalError IO)
+type Eval r = ReaderT r (Except EvalError)
 
-runEval :: Eval r a -> r -> IO(Either EvalError a)
-runEval m r = runExceptT $ runReaderT m r
+runEval :: Eval r a -> r -> Either EvalError a
+runEval m r = runExcept $ runReaderT m r
 
-evalLoop :: [Function] -> Expr -> IO ()
-evalLoop fs e = do
-    s <- runEval (init e) fs
-    case s of
-        Left err -> die $ show err
+evalLoop :: [Function] -> Expr -> [Either EvalError Value]
+evalLoop fs e = 
+    case runEval (init e) fs of
+        Left err -> [Left err]
         Right s -> loop s
     where
-        loop :: ExprS -> IO ()
-        loop s = do
-            res <- runEval (eval s) (Map.empty)
-            case res of
-                Left err -> die $ show err
-                Right (s', v) -> (putStrLn $ show v) >> loop s'
+        loop :: ExprS -> [Either EvalError Value]
+        loop s = 
+            case runEval (eval s) (Map.empty) of
+                Left err -> [Left err]
+                Right (s',v) -> (Right v):loop s'
+        -- loop s = (\(s',v) -> loop s') =<< runEval (eval s) (Map.empty)

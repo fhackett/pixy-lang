@@ -48,6 +48,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - pixy
+    - ansi-terminal >= 0.8 && < 0.9
 
 
 tests:
