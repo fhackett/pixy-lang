@@ -1,0 +1,7 @@
+foo(x) = fizz
+    where
+        fizz = buzz
+            where
+                buzz = 4 
+
+-- foo(x) = if x then (y where y = 3) else 8

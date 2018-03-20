@@ -80,6 +80,7 @@ reservedWords :: [String]
 reservedWords = 
     [ "nil"
     , "fby"
+    , "next"
     , "where"
     , "if"
     , "then"
