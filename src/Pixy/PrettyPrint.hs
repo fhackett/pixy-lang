@@ -2,7 +2,7 @@ module Pixy.PrettyPrint where
 
 import Text.PrettyPrint
 
--- import Pixy.Syntax
+import Pixy.Syntax
 
 -- class Pretty p where
 --     ppr :: p -> Doc

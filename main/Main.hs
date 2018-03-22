@@ -7,15 +7,45 @@ import Pixy.Syntax
 import Pixy.Parser
 import Control.Monad
 import System.Console.ANSI
+import Options.Applicative
+import Data.Semigroup ((<>))
+
+data Options = Options 
+    { file :: FilePath
+    , count :: Maybe Int
+    }
+
+options :: Parser Options
+options = Options
+    <$> argument str
+        (metavar "FILENAME"
+        <> help "The file to execute"
+        )
+    <*> (option $ optional auto)
+        (short 'n'
+        <> metavar "INT"
+        <> help "The number of values to compute"
+        <> value Nothing
+        )
 
 
 main :: IO ()
-main = do
-    fname <- head <$> getArgs
-    contents <- readFile fname
-    case runParser program fname contents of
+main = exec =<< execParser opts
+    where
+        opts = info (options <**> helper)
+            (fullDesc
+            <> progDesc "Execute the file FILENAME"
+            <> header "Pixy -- A simple dataflow language")
+
+exec :: Options -> IO ()
+exec o = do
+    contents <- readFile $ file o
+    case runParser program (file o) contents of
         Left err -> die err
-        Right fs -> forM_ (evalLoop fs (App "main" [])) display
+        Right fs -> forM_ (go $ evalLoop fs (App "main" [])) display
+    where go = case count o of
+            Just n -> take n
+            Nothing -> id
 
 display :: Either EvalError Value ->  IO ()
 display (Left err) = showErr err

@@ -49,6 +49,7 @@ executables:
     dependencies:
     - pixy
     - ansi-terminal >= 0.8 && < 0.9
+    - optparse-applicative >= 0.14 && < 0.15
 
 
 tests:

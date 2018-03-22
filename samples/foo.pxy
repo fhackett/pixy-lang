@@ -1,3 +1,3 @@
 main () = x
     where
-        x = true fby (false fby next x)
+        x = 1 fby 2 fby (next x)

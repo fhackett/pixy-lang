@@ -49,3 +49,5 @@ data ExprS
     | WhereS ExprS (Map Var (ExprS, Value))
     | AppS ExprS (Map Var ExprS)
     | BinopS Binop ExprS ExprS
+    deriving (Show)
+

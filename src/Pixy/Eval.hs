@@ -122,6 +122,7 @@ eval (BinopS op l r) = do
             if j /= 0 then return $ VInt (i `div` j) 
             else throwError $ DivideByZero
         (Equals, VInt i, VInt j) -> return $ VBool (i == j)
+        (_, VNil, VNil) -> return VNil
         (op, lVal, rVal) -> throwError $ OperandMismatch op lVal rVal
     return (BinopS op l' r', resVal)
 
