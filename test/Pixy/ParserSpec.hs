@@ -1,7 +1,7 @@
 module Pixy.ParserSpec where
 
 import Test.Hspec
-import Pixy.Parser
+import Pixy.Parser.Parser
 import Pixy.Syntax
 import Pixy.PrettyPrint
 import System.Directory

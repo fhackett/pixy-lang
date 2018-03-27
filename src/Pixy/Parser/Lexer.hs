@@ -1,6 +1,6 @@
-module Pixy.Lexer
+module Pixy.Parser.Lexer
     ( Parser
-    , scn
+    -- , scn
     , symbol
     , integer
     , parens
@@ -28,13 +28,16 @@ lineCmt = L.skipLineComment "--"
 blockCmt :: Parser ()
 blockCmt = L.skipBlockComment "{-" "-}"
 
-scn :: Parser ()
-scn = L.space P.space1 lineCmt blockCmt
+-- scn :: Parser ()
+-- scn = L.space P.space1 lineCmt blockCmt
 
 sc :: Parser ()
-sc = L.space (void $ P.takeWhile1P Nothing f) lineCmt blockCmt
-    where
-        f x = x == ' ' || x == '\t'
+sc = L.space P.space1 lineCmt blockCmt
+
+-- sc :: Parser ()
+-- sc = L.space (void $ P.takeWhile1P Nothing f) lineCmt blockCmt
+--     where
+--         f x = x == ' ' || x == '\t'
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc

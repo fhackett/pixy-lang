@@ -1,8 +1,10 @@
 count() = n 
-    where
+    where {
         n = 1 fby n + 1
+    }
 
-main() = (if l then count() else nil)
-    where
+main() = if l then count() else nil
+    where {
         l = true fby r
         r = false fby l
+    }

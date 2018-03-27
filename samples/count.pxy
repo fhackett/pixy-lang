@@ -1,3 +1,4 @@
 main() = n
-    where
+    where {
         n = 1 fby n + 1
+    }

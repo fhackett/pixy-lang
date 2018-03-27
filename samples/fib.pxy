@@ -1,3 +1,4 @@
 main() = fib
-    where
+    where {
         fib = 0 fby (1 fby (fib + next fib))
+    }

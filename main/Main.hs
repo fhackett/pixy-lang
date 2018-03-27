@@ -4,7 +4,7 @@ import System.Environment
 import System.Exit
 import Pixy.Eval
 import Pixy.Syntax
-import Pixy.Parser
+import Pixy.Parser.Parser
 import Control.Monad
 import System.Console.ANSI
 import Options.Applicative

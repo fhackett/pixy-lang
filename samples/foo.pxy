@@ -1,3 +1,1 @@
-main () = x
-    where
-        x = 1 fby 2 fby (next x)
+main () = 1 + y where { y = 3 }

@@ -1,4 +1,4 @@
-module Pixy.Parser
+module Pixy.Parser.Parser
     ( program
     , expr
     , runParser
@@ -7,25 +7,24 @@ where
 
 import Control.Applicative ((<|>))
 import qualified Text.Megaparsec as P
+import Text.Megaparsec ((<?>))
 import qualified Text.Megaparsec.Expr as P
 import qualified Text.Megaparsec.Char.Lexer as L
 
-import Pixy.Lexer
+import Pixy.Parser.Lexer
 import Pixy.Syntax
 
 function :: Parser Function
-function = L.nonIndented scn (Function <$> identifier <*> (parens (P.sepBy identifier comma)) <*> (symbol "=" *> expr))
-
--- variable :: Parser Var
--- variable = string2Name <$> identifier
+function = Function <$> identifier <*> (parens (P.sepBy identifier comma)) <*> (symbol "=" *> expr)
+-- function = L.nonIndented scn (Function <$> identifier <*> (parens (P.sepBy identifier comma)) <*> (symbol "=" *> expr))
 
 value :: Parser Value
 value = P.choice
-    [ (VBool True) <$ reserved "true" 
+    [ (VBool True) <$ reserved "true"
     , (VBool False) <$ reserved "false"
     , VNil <$ reserved "nil"
     , (VInt . fromIntegral) <$> integer
-    ]
+    ] <?> "value"
 
 term :: Parser Expr
 term = P.choice
@@ -35,7 +34,7 @@ term = P.choice
     , If <$> (reserved "if" *> expr) <*> (reserved "then" *> expr) <*> (reserved "else" *> expr)
     , Next <$> (reserved "next" *> expr)
     , parens expr
-    ]
+    ] <?> "expression"
 
 operators :: [[P.Operator Parser Expr]]
 operators =
@@ -46,21 +45,25 @@ operators =
     , [ binary "==" (Binop Equals) ]
     , [ binary "fby" Fby ]
     , [ prefix "?" Check ]
-    -- , [ P.Postfix _where ]
+    , [ P.Postfix _where ]
     ]
     where
         binary name f = P.InfixL (f <$ symbol name)
         prefix name f = P.Prefix (f <$ symbol name)
-
-expr' :: Parser Expr
-expr' = P.makeExprParser term operators
+        _where = flip Where <$> (reserved "where" *> brackets (P.some ((,) <$> identifier <*> (symbol "=" *> expr))))
+        -- _where = L.indentBlock scn $ do
+        --     _ <- symbol "where"
+        --     return (L.IndentSome Nothing (return . flip Where) ((,) <$> identifier <*> (symbol "=" *> expr)))
 
 expr :: Parser Expr
-expr = expr' >>= (\e -> P.try (_where e) <|> return e)
-    where
-        _where e = L.indentBlock scn $ do
-            reserved "where"
-            return (L.IndentSome Nothing (return . Where e) ((,) <$> identifier <*> (symbol "=" *> expr)))
+expr = P.makeExprParser term operators
+
+-- expr :: Parser Expr
+-- expr = expr' >>= (\e -> _where e <|> return e)
+--     where
+--         _where e = L.indentBlock scn $ do
+--             reserved "where"
+--             return (L.IndentSome Nothing (return . Where e) ((,) <$> identifier <*> (symbol "=" *> expr)))
 
 program :: Parser [Function]
 program = P.many function

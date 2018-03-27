@@ -1,8 +1,10 @@
-avg(x) = (sum / count)
-    where
+avg(x) = sum / count
+    where {
         count = 0 fby if ?x then count + 1 else count
         sum = 0 fby if ?x then sum + x else sum
+    }
 
 main() = avg(n)
-    where 
+    where {
         n = 1 fby n + 1
+    }
