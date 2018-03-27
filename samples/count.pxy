@@ -1,4 +1,3 @@
-main() = n
-    where {
-        n = 1 fby n + 1
-    }
+main() = n where {
+    n = 1 fby n + 1
+}

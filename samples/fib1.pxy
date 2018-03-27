@@ -1,5 +1,4 @@
-main() = f
-    where {
-        f = 1 fby (f + g)
-        g = 0 fby f
-    }
+main() = f where {
+    f = 1 fby (f + g)
+    g = 0 fby f
+}

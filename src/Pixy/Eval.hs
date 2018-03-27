@@ -4,8 +4,11 @@ import Prelude hiding (init)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.Identity
-import Control.Monad.Writer.Strict
+import Control.Monad.State.Strict
 import Data.Void
+import Data.Bifunctor
+import Data.Foldable
+import Data.Ord (comparing)
 import Pixy.Syntax
 import qualified Data.Map.Strict as Map
 import Data.List (find)
@@ -30,6 +33,69 @@ data EvalError
     | OperandMismatch Binop Value Value
     | DivideByZero
     deriving (Show)
+
+data CVar
+    = Gen String !Int
+    | Bound Var
+    deriving (Eq, Show)
+
+data Constraint
+    = K CVar !Int -- ^ The variable is constrained to a constant delay
+    | E CVar CVar !Int -- ^ The variable is constrained to be equal to another variable with an offset
+    | LE CVar CVar !Int -- ^ The variable is constrained to be less than or equal to another variable with an offset
+    | Max CVar CVar CVar !Int
+    deriving (Show)
+
+
+-- | Increments the delay of a constraint
+increment :: Constraint -> Constraint
+increment (K v i) = K v (i + 1)
+increment (E x y i) = E x y (i + 1)
+increment (LE x y i) = LE x y (i + 1)
+increment (Max x y z i) = Max x y z (i + 1)
+
+constrained :: Constraint -> CVar
+constrained (K v _) = v
+constrained (E x _ _) = x
+constrained (LE x _ _) = x
+constrained (Max x _ _ _) = x
+
+genCVar :: String -> State Int CVar
+genCVar s = do
+    k <- get
+    put (k + 1)
+    return $ Gen s k
+
+constraints :: Expr -> CVar -> State Int [Constraint]
+constraints e v = case e of
+    (Var x) -> return [E v (Bound x) 1]
+    (Const _) -> return [K v 0]
+    (If c t f) -> do
+        cc <- constraints c v
+        tt <- constraints t v
+        ff <- constraints f v
+        return $ cc ++ tt ++ ff
+    (Check e) -> constraints e v
+    (Next e) -> fmap (\c -> if constrained c == v then increment c else c) <$> constraints e v
+    (Fby l r) -> do
+        lhs <- genCVar "lhs"
+        rhs <- genCVar "rhs"
+        ll <- constraints l lhs
+        rr <- constraints r rhs
+        return $ [E v lhs 0] ++ ll ++ rr ++ [LE rhs lhs 1]
+    (Where body bs) -> do
+        cbody <- constraints body v
+        cbs <- sequence $ (\(v,e) -> constraints e (Bound v)) <$> bs
+        return $ cbody ++ join cbs
+    (App _ args) -> return []
+    (Binop _ l r) -> do
+        lhs <- genCVar "bl"
+        rhs <- genCVar "br"
+        cl <- constraints l lhs
+        cr <- constraints r rhs
+        return $ [Max v lhs rhs 0] ++ cl ++ cr
+
+
 
 init :: (MonadReader [Function] m, MonadError EvalError m) => Expr -> m ExprS
 init (Var x) = return $ VarS x
@@ -74,7 +140,7 @@ eval (IfS c t f) = do
             t' <- chokeEval t
             (f', fVal) <- eval f
             return (IfS c' t' f', fVal)
-        v -> throwError $ BooleanExpected v 
+        v -> throwError $ BooleanExpected v
 eval (CheckS e) = do
     (e', eVal) <- eval e
     case eVal of
@@ -91,7 +157,7 @@ eval (FbyS latch l r) =
         case lVal of
             VNil -> return (FbyS False l' r', VNil)
             v -> return (FbyS True l' r', v)
-eval (NextS latch vBuffer e) = 
+eval (NextS latch vBuffer e) =
     if latch then do
         (e', eVal) <- eval e
         -- TODO: Ask Finn if a nil should disable buffering forever
@@ -118,8 +184,8 @@ eval (BinopS op l r) = do
         (Plus, VInt i, VInt j) -> return $ VInt (i + j)
         (Minus, VInt i, VInt j) -> return $ VInt (i - j)
         (Times, VInt i, VInt j) -> return $ VInt (i * j)
-        (Divide, VInt i, VInt j)  -> 
-            if j /= 0 then return $ VInt (i `div` j) 
+        (Divide, VInt i, VInt j)  ->
+            if j /= 0 then return $ VInt (i `div` j)
             else throwError $ DivideByZero
         (Equals, VInt i, VInt j) -> return $ VBool (i == j)
         (_, VNil, VNil) -> return VNil
@@ -163,14 +229,18 @@ runEval :: Eval r a -> r -> Either EvalError a
 runEval m r = runExcept $ runReaderT m r
 
 evalLoop :: [Function] -> Expr -> [Either EvalError Value]
-evalLoop fs e = 
+evalLoop fs e =
     case runEval (init e) fs of
         Left err -> [Left err]
         Right s -> loop s
     where
         loop :: ExprS -> [Either EvalError Value]
-        loop s = 
+        loop s =
             case runEval (eval s) (Map.empty) of
                 Left err -> [Left err]
                 Right (s',v) -> (Right v):loop s'
         -- loop s = (\(s',v) -> loop s') =<< runEval (eval s) (Map.empty)
+
+genConstraints :: [Function] -> [Constraint]
+genConstraints fs = join $ fst $ (flip runState 0) $ traverse (\(Function n _ e) -> constraints e (Bound n)) fs
+

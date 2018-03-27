@@ -1,0 +1,4 @@
+main() = x where {
+    x = y
+    y = x
+}

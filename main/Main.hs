@@ -5,6 +5,7 @@ import System.Exit
 import Pixy.Eval
 import Pixy.Syntax
 import Pixy.Parser.Parser
+import Pixy.PrettyPrint
 import Control.Monad
 import System.Console.ANSI
 import Options.Applicative
@@ -13,6 +14,7 @@ import Data.Semigroup ((<>))
 data Options = Options 
     { file :: FilePath
     , count :: Maybe Int
+    , dumpConstraints :: Bool
     }
 
 options :: Parser Options
@@ -26,6 +28,11 @@ options = Options
         <> metavar "INT"
         <> help "The number of values to compute"
         <> value Nothing
+        )
+    <*> switch
+        (long "constraints"
+        <> short 'c'
+        <> help "Print the constraints that are generated"
         )
 
 
@@ -42,7 +49,9 @@ exec o = do
     contents <- readFile $ file o
     case runParser program (file o) contents of
         Left err -> die err
-        Right fs -> forM_ (go $ evalLoop fs (App "main" [])) display
+        Right fs -> 
+            if dumpConstraints o then mapM_ (putStrLn . pp) $ genConstraints fs
+            else forM_ (go $ evalLoop fs (App "main" [])) display
     where go = case count o of
             Just n -> take n
             Nothing -> id

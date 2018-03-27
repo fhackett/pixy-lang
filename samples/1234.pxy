@@ -1,4 +1,3 @@
-main () = x
-    where {
+main () = x where {
         x = 1 fby (2 fby (3 fby 4))
-    }
+}

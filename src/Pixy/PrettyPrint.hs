@@ -3,40 +3,33 @@ module Pixy.PrettyPrint where
 import Text.PrettyPrint
 
 import Pixy.Syntax
+import Pixy.Eval
 
--- class Pretty p where
---     ppr :: p -> Doc
+class Pretty p where
+    ppr :: p -> Doc
 
--- instance Pretty Value where
---     ppr (VBool b) = if b then text "true" else text "false"
---     ppr (VInt k) = integer $ toInteger k
---     ppr (VNil) = text "nil"
+instance Pretty Int where
+    ppr = integer . toInteger
 
--- binop :: String -> Expr -> Expr -> Doc
--- binop s l r = do
---     pl <- ppr l
---     pr <- ppr r
---     return $ pl <+> text s <+> pr
+instance Pretty Value where
+    ppr (VBool b) = if b then text "true" else text "false"
+    ppr (VInt k) = ppr k
+    ppr (VNil) = text "nil"
 
--- instance Pretty Expr where
---     ppr (Var x) = return $ text x
---     ppr (Const k) = ppr k
---     ppr (Check e) = do
---         pe <- ppr e
---         return $ text "?" <> pe
---     ppr (If c t f) = do
---         pc <- ppr c
---         pt <- ppr t
---         pf <- ppr f
---         return $ text "if" <+> pc <+> text "then" <+> pt <+> text "else" <+> pf
---     ppr (Fby s n) = do
---         ps <- ppr s
---         pn <- ppr n
---         return $ ps <+> text "fby" <+> pn
---     ppr (Next e) = do
---         pe <- ppr e
---         return $ text "next" <+> pe
---     -- ppr (Where bnd) = 
+binop :: String -> Expr -> Expr -> Doc
+binop s l r = ppr l <+> text s <+> ppr r
+
+brackets :: Doc -> Doc
+brackets d = text "{" <+> d <+> text "}"
+
+instance Pretty Expr where
+    ppr (Var x) = text x
+    ppr (Const k) = ppr k
+    ppr (Check e) = text "?" <> ppr e
+    ppr (If c t f) = text "if" <+> ppr c <+> text "then" <+> ppr t <+> text "else" <+> ppr f
+    ppr (Fby s n) = ppr s <+> text "fby" <+> ppr n
+    ppr (Next e) = text "next" <+> ppr e
+    -- ppr (Where body bs) = ppr body <+> text "where" <> brackets (vcat pbs)
 --     --     lunbind bnd $ \(unrec -> bs,bdy) -> do
 --     --         pbs <- mapM ((\(v,e) -> do
 --     --             pv <- ppr v
@@ -60,5 +53,25 @@ import Pixy.Syntax
 -- --             pbdy <- ppr bdy
 -- --             return $ text name <> parens(hsep $ punctuate comma pargs) <+> text "=" <+> pbdy
 
--- pp :: (Pretty a) => a -> String
--- pp = render . runLFreshM . ppr
+instance Pretty CVar where
+    ppr (Gen s k) = text s <> ppr k
+    ppr (Bound x) = text x
+
+delay :: CVar -> Doc
+delay x = text "d" <> parens (ppr x)
+
+instance Pretty Constraint where
+    ppr (K x k) = delay x <+> text "=" <+> ppr k
+    ppr (E x y k) = 
+        let b = delay x <+> text "=" <+> delay y 
+        in if k == 0 then b else b <+> text "+" <+> ppr k
+    ppr (LE x y k) = 
+        let b = delay x <+> text "<=" <+> delay y 
+        in if k == 0 then b else b <+> text "+" <+> ppr k
+    ppr (Max x y z k) = 
+        let b = delay x <+> text "=" <+> text "max" <> parens (delay y <> comma <+> delay z)
+        in if k == 0 then b else b <+> text "+" <+> ppr k
+
+
+pp :: (Pretty a) => a -> String
+pp = render . ppr
