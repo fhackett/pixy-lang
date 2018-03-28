@@ -77,7 +77,7 @@ instance Pretty Constraint where
         let b = delay x <+> text "<=" <+> delay y 
         in if k == 0 then b else b <+> text "+" <+> ppr k
     ppr (Sub x y z k) = 
-        let b = delay' x <+> text "=" <+> delay' y <+> text "-" <+> delay' z
+        let b = delay' x <+> text "=" <+> delay y <+> text "-" <+> delay z
         in if k == 0 then b else b <+> text "+" <+> ppr k
     ppr (Max x ys k) = 
         let b = delay' x <+> text "=" <+> text "max" <> parens (hsep $ punctuate comma $ fmap ppr ys)

@@ -35,7 +35,7 @@ data EvalError
     deriving (Show)
 
 data ConstraintError
-    = ConstraintMismatch CVar Int Int
+    = ConstraintMismatch Constraint
     deriving (Show)
 
 data CVar
@@ -52,6 +52,7 @@ data Constraint
     | LE CVar CVal CVal !Int -- ^ The variable is constrained to be less than or equal to another variable with an offset
     | Max CVar [CVal] !Int
     | Sub CVar CVal CVal !Int
+    deriving (Show)
 
 max :: CVar -> [CVar] -> Int -> Constraint
 max x ys i = Max x (fmap CVar ys) i
@@ -140,7 +141,12 @@ reduce = reduce' . reverse
                     (Gen _ _) -> return cs'
             (LE x (CVal i) (CVal j) k) ->
                 if (i <= j + k) then reduce cs 
-                else throwError $ ConstraintMismatch x i j
+                else throwError $ ConstraintMismatch c
+            -- (Max x ys j) -> 
+            --     let c' = 
+            --             if all cval ys then 
+            --             else Max x ys j
+            --     in (c':) <$> reduce' cs
             _ -> (c:) <$> reduce' cs
 
         subst :: CVar -> Int -> Constraint -> Constraint
@@ -150,12 +156,30 @@ reduce = reduce' . reverse
             case y of
                 (CVar y) -> (E x y (j - i))
                 (CVal k) -> (K x (k - i + j))
+        subst v i (Max x ys j) = 
+            let 
+                ys' = (replace (cvarEq v) (CVal i) ys)
+            in 
+                if all cval ys' then K x (j + (maximum $ (\(CVal k) -> k) <$> ys'))
+                else (Max x ys' j)
         -- Note that we have structured things in such a way that
         -- -- we always hit the RHS of a LE before the right
         subst v i (LE x xval (CVar y) j) | v == y = (LE x xval (CVal i) j)
         subst v i (LE x (CVar xval) y j) | v == xval = (LE x (CVal i) y j)
         -- TODO: Fill in the other cases
         subst _ _ c = c
+
+        replace :: (a -> Bool) -> a -> [a] -> [a]
+        replace p f [] = []
+        replace p y (x:xs) = if p x then y:replace p y xs else x:replace p y xs
+
+        cvarEq :: CVar -> CVal -> Bool
+        cvarEq x (CVar y) = x == y
+        cvarEq _ _ = False
+
+        cval :: CVal -> Bool
+        cval (CVar _) = False
+        cval (CVal _) = True
 
 init :: (MonadReader [Function] m, MonadError EvalError m) => Expr -> m ExprS
 init (Var x) = return $ VarS x
