@@ -3,7 +3,7 @@ module Pixy.PrettyPrint where
 import Text.PrettyPrint
 
 import Pixy.Syntax
-import Pixy.Eval
+import Pixy.Delay
 
 class Pretty p where
     ppr :: p -> Doc

@@ -1,3 +1,4 @@
 main() = n where {
     n = 1 fby n + 1
+    x = next n
 }

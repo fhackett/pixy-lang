@@ -2,14 +2,16 @@ module Main where
 
 import System.Environment
 import System.Exit
-import Pixy.Eval
-import Pixy.Syntax
-import Pixy.Parser.Parser
-import Pixy.PrettyPrint
 import Control.Monad
 import System.Console.ANSI
 import Options.Applicative
 import Data.Semigroup ((<>))
+
+import Pixy.Eval
+import Pixy.Delay
+import Pixy.Syntax
+import Pixy.Parser.Parser
+import Pixy.PrettyPrint
 
 data Options = Options 
     { file :: FilePath
