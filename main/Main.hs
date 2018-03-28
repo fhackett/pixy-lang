@@ -50,7 +50,12 @@ exec o = do
     case runParser program (file o) contents of
         Left err -> die err
         Right fs -> 
-            if dumpConstraints o then mapM_ (putStrLn . pp) $ genConstraints fs
+            if dumpConstraints o then do
+                let cs = genConstraints fs
+                putStrLn "--[Constraints]--"
+                mapM_ (putStrLn . pp) cs
+                putStrLn "--[Reduced]--"
+                either showErr (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
             else forM_ (go $ evalLoop fs (App "main" [])) display
     where go = case count o of
             Just n -> take n

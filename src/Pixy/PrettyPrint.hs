@@ -57,19 +57,30 @@ instance Pretty CVar where
     ppr (Gen s k) = text s <> ppr k
     ppr (Bound x) = text x
 
-delay :: CVar -> Doc
-delay x = text "d" <> parens (ppr x)
+instance Pretty CVal where
+    ppr (CVar x) = ppr x
+    ppr (CVal k) = ppr k
+
+delay :: CVal -> Doc
+delay (CVar x) = text "d" <> parens (ppr x)
+delay (CVal k) = ppr k
+
+delay' :: CVar -> Doc
+delay' = delay . CVar
 
 instance Pretty Constraint where
-    ppr (K x k) = delay x <+> text "=" <+> ppr k
+    ppr (K x k) = delay' x <+> text "=" <+> ppr k
     ppr (E x y k) = 
-        let b = delay x <+> text "=" <+> delay y 
+        let b = delay' x <+> text "=" <+> delay' y 
         in if k == 0 then b else b <+> text "+" <+> ppr k
-    ppr (LE x y k) = 
+    ppr (LE _ x y k) = 
         let b = delay x <+> text "<=" <+> delay y 
         in if k == 0 then b else b <+> text "+" <+> ppr k
-    ppr (Max x y z k) = 
-        let b = delay x <+> text "=" <+> text "max" <> parens (delay y <> comma <+> delay z)
+    ppr (Sub x y z k) = 
+        let b = delay' x <+> text "=" <+> delay' y <+> text "-" <+> delay' z
+        in if k == 0 then b else b <+> text "+" <+> ppr k
+    ppr (Max x ys k) = 
+        let b = delay' x <+> text "=" <+> text "max" <> parens (hsep $ punctuate comma $ fmap ppr ys)
         in if k == 0 then b else b <+> text "+" <+> ppr k
 
 

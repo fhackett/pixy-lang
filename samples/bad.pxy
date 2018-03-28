@@ -1,4 +1,3 @@
 main() = x where {
-    x = y
-    y = x
+    x = 1 fby (next x)
 }
