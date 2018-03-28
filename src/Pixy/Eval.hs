@@ -55,13 +55,13 @@ data Constraint
     deriving (Show)
 
 max :: CVar -> [CVar] -> Int -> Constraint
-max x ys i = Max x (fmap CVar ys) i
+max x ys = Max x (fmap CVar ys)
 
 le :: CVar -> CVar -> Int -> Constraint
-le x y i = LE x (CVar x) (CVar y) i
+le x y = LE x (CVar x) (CVar y)
 
 sub :: CVar -> CVar -> CVar -> Int -> Constraint
-sub x y z i = Sub x (CVar y) (CVar z) i
+sub x y z = Sub x (CVar y) (CVar z)
 
 -- | Increments the delay of a constraint
 increment :: Constraint -> Constraint
@@ -84,15 +84,18 @@ genCVar n = do
     put (k + 1)
     return $ Gen n k
 
-type CM = ReaderT [CVar] (State Int)
+type CM = ReaderT ([CVar], Int) (State Int)
 
 runCM :: CM a -> a
-runCM = flip evalState 0 . flip runReaderT []
+runCM = flip evalState 0 . flip runReaderT ([], 1)
 
-isRec :: (MonadReader [CVar] m) => CVar -> m Bool
-isRec v = asks (elem v)
+isRec :: (MonadReader ([CVar], Int) m) => CVar -> m Bool
+isRec v = asks (elem v . fst)
 
-constraints :: (MonadState Int m, MonadReader [CVar] m) => Expr -> CVar -> m [Constraint]
+fbyLevel :: (MonadReader ([CVar], Int) m) => m Int
+fbyLevel = asks snd
+
+constraints :: (MonadState Int m, MonadReader ([CVar], Int) m) => Expr -> CVar -> m [Constraint]
 constraints e v = case e of
     (Var x) -> isRec (Bound x) >>= \case
             True -> return [K v 1]
@@ -112,8 +115,9 @@ constraints e v = case e of
         lhs <- genCVar "lhs"
         rhs <- genCVar "rhs"
         ll <- constraints l lhs
-        rr <- local (v:) (constraints r rhs)
-        return $ [sub v lhs rhs 1, le rhs lhs 1] ++ ll ++ rr
+        rr <- local (\(vs, l) -> (v:vs, l+1)) (constraints r rhs)
+        l <- fbyLevel
+        return $ [sub v lhs rhs l, le rhs lhs l] ++ ll ++ rr
     (Where body bs) -> do
         cbody <- constraints body v
         cbs <- sequence $ (\(v,e) -> constraints e (Bound v)) <$> bs
@@ -127,11 +131,11 @@ constraints e v = case e of
         return $ [max v [lhs, rhs] 0] ++ cl ++ cr
 
 -- We have to work backwards, substituting and solving as we go
-reduce :: [Constraint] -> Either ConstraintError [Constraint]
+reduce :: [Constraint] -> Either Constraint [Constraint]
 reduce = reduce' . reverse
     where
 
-        reduce' :: [Constraint] -> Either ConstraintError [Constraint]
+        reduce' :: [Constraint] -> Either Constraint [Constraint]
         reduce' [] = return []
         reduce' (c:cs) = case c of
             (K v i) -> do
@@ -140,13 +144,8 @@ reduce = reduce' . reverse
                     (Bound _) -> return $ c:cs'
                     (Gen _ _) -> return cs'
             (LE x (CVal i) (CVal j) k) ->
-                if (i <= j + k) then reduce cs 
-                else throwError $ ConstraintMismatch c
-            -- (Max x ys j) -> 
-            --     let c' = 
-            --             if all cval ys then 
-            --             else Max x ys j
-            --     in (c':) <$> reduce' cs
+                if (i <= j + k) then reduce' cs 
+                else throwError $ c
             _ -> (c:) <$> reduce' cs
 
         subst :: CVar -> Int -> Constraint -> Constraint

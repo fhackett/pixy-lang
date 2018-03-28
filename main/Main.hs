@@ -55,7 +55,7 @@ exec o = do
                 putStrLn "--[Constraints]--"
                 mapM_ (putStrLn . pp) cs
                 putStrLn "--[Reduced]--"
-                either showErr (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
+                either (\e -> printErr ("Constraint Error:\n" ++ pp e ++ "\n")) (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
             else forM_ (go $ evalLoop fs (App "main" [])) display
     where go = case count o of
             Just n -> take n
