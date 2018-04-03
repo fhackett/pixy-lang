@@ -1,3 +1,3 @@
 main () = x where {
-        x = 1 fby (2 fby (3 fby 4))
+        x = 1 fby (2 fby (3 fby (next (next x))))
 }

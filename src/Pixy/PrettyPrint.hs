@@ -67,7 +67,6 @@ instance Pretty Expr where
 
 instance Pretty CTerm where
     ppr (CVar v) = text v
-    ppr (CSub t1 t2) = parens $ ppr t1 <+> text "-" <+> ppr t2
     ppr (CPlus t i) = parens $ ppr t <+> text "+" <+> ppr i
     ppr (CMax t1 t2) = text "max" <> parens (ppr t1 <> comma <+> ppr t2)
     ppr (CConst k) = ppr k
