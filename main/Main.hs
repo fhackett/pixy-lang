@@ -53,11 +53,11 @@ exec o = do
         Left err -> die err
         Right fs -> 
             if dumpConstraints o then do
-                let cs = genConstraints fs
+                let cs = genConstraints =<< fs
                 putStrLn "--[Constraints]--"
                 mapM_ (putStrLn . pp) cs
                 putStrLn "--[Reduced]--"
-                either (\e -> printErr ("Constraint Error:\n" ++ pp e ++ "\n")) (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
+                -- either (\e -> printErr ("Constraint Error:\n" ++ pp e ++ "\n")) (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
             else forM_ (go $ evalLoop fs (App "main" [])) display
     where go = case count o of
             Just n -> take n

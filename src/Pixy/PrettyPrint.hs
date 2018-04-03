@@ -53,35 +53,46 @@ instance Pretty Expr where
 -- --             pbdy <- ppr bdy
 -- --             return $ text name <> parens(hsep $ punctuate comma pargs) <+> text "=" <+> pbdy
 
-instance Pretty CVar where
-    ppr (Gen s k) = text s <> ppr k
-    ppr (Bound x) = text x
 
-instance Pretty CVal where
-    ppr (CVar x) = ppr x
-    ppr (CVal k) = ppr k
+-- instance Pretty CVal where
+--     ppr (CVar x) = ppr x
+--     ppr (CVal k) = ppr k
 
-delay :: CVal -> Doc
-delay (CVar x) = text "d" <> parens (ppr x)
-delay (CVal k) = ppr k
+-- delay :: CVal -> Doc
+-- delay (CVar x) = text "d" <> parens (ppr x)
+-- delay (CVal k) = ppr k
 
-delay' :: CVar -> Doc
-delay' = delay . CVar
+-- delay' :: CVar -> Doc
+-- delay' = delay . CVar
+
+instance Pretty CTerm where
+    ppr (CVar v) = text v
+    ppr (CSub t1 t2) = parens $ ppr t1 <+> text "-" <+> ppr t2
+    ppr (CPlus t i) = parens $ ppr t <+> text "+" <+> ppr i
+    ppr (CMax t1 t2) = text "max" <> parens (ppr t1 <> comma <+> ppr t2)
+    ppr (CConst k) = ppr k
 
 instance Pretty Constraint where
-    ppr (K x k) = delay' x <+> text "=" <+> ppr k
-    ppr (E x y k) = 
-        let b = delay' x <+> text "=" <+> delay' y 
-        in if k == 0 then b else b <+> text "+" <+> ppr k
-    ppr (LE _ x y k) = 
-        let b = delay x <+> text "<=" <+> delay y 
-        in if k == 0 then b else b <+> text "+" <+> ppr k
-    ppr (Sub x y z k) = 
-        let b = delay' x <+> text "=" <+> delay y <+> text "-" <+> delay z
-        in if k == 0 then b else b <+> text "+" <+> ppr k
-    ppr (Max x ys k) = 
-        let b = delay' x <+> text "=" <+> text "max" <> parens (hsep $ punctuate comma $ fmap ppr ys)
-        in if k == 0 then b else b <+> text "+" <+> ppr k
+    ppr (CEQ t1 t2 i) = 
+        let b = ppr t1 <+> text "=" <+> ppr t2
+        in if i == 0 then b else b <+> text "+" <+> ppr i
+    ppr (CLEQ t1 t2 i) = 
+        let b = ppr t1 <+> text "<=" <+> ppr t2
+        in if i == 0 then b else b <+> text "+" <+> ppr i
+-- instance Pretty Constraint where
+--     ppr (K x k) = delay' x <+> text "=" <+> ppr k
+--     ppr (E x y k) = 
+--         let b = delay' x <+> text "=" <+> delay' y 
+--         in if k == 0 then b else b <+> text "+" <+> ppr k
+--     ppr (LE _ x y k) = 
+--         let b = delay x <+> text "<=" <+> delay y 
+--         in if k == 0 then b else b <+> text "+" <+> ppr k
+--     ppr (Sub x y z k) = 
+--         let b = delay' x <+> text "=" <+> delay y <+> text "-" <+> delay z
+--         in if k == 0 then b else b <+> text "+" <+> ppr k
+--     ppr (Max x ys k) = 
+--         let b = delay' x <+> text "=" <+> text "max" <> parens (hsep $ punctuate comma $ fmap ppr ys)
+--         in if k == 0 then b else b <+> text "+" <+> ppr k
 
 
 pp :: (Pretty a) => a -> String

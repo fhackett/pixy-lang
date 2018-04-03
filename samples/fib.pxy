@@ -1,3 +1,4 @@
-main() = fib where {
-    fib = 0 fby (1 fby (fib + next fib))
+main() = f where {
+    -- f = 0 fby (1 fby (f + next f))
+    f = 0 fby (1 fby (next f))
 }

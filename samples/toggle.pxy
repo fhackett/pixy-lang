@@ -1,8 +1,4 @@
-count() = n where {
-    n = 1 fby n + 1
-}
-
-main() = if l then count() else nil where {
+main() = l where {
     l = true fby r
     r = false fby l
 }
