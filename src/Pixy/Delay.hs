@@ -3,8 +3,10 @@ module Pixy.Delay where
 
 import Control.Monad.State.Lazy
 import Control.Monad.Reader
+import Control.Monad.Writer.Strict
 import Control.Monad.Except
 import Control.Applicative (Alternative, (<|>))
+import Data.Foldable (traverse_)
 
 import qualified Data.Map as Map
 import Data.Map (Map, (!))
@@ -27,10 +29,14 @@ newtype Solver s a = Solver { unSolver :: StateT (SolverState s) [] a }
 newtype SolverVar s = SolverVar { unVar :: Var }
     deriving (Eq, Ord)
 
-data SolverState s = SolverState { varSupply :: SolverVar s } --, varMap :: Map SolverVar VarInfo }
+data VarInfo s = VarInfo
+     { delayedConstraints :: Solver s Bool, values :: IntSet }
+
+data SolverState s = SolverState { varSupply :: SolverVar s , varMap :: Map (SolverVar s) (VarInfo s) }
 
 add :: Constraint -> Solver s Bool
-add = undefined
+add (CEQ t1 t2) = undefined
+
 
 newvar :: Solver s CTerm
 newvar = undefined
@@ -53,8 +59,8 @@ newvar = undefined
 
 
 data Constraint
-    = CEQ CTerm CTerm !Int  -- x = y + i
-    | CLEQ CTerm CTerm !Int -- x <= y + i
+    = CEQ CTerm CTerm -- x = y + i
+    | CLEQ CTerm CTerm -- x <= y + i
     deriving (Show)
 
 data CTerm
@@ -65,11 +71,11 @@ data CTerm
     deriving (Show)
 
 (@=) :: CTerm -> CTerm -> Constraint
-t1 @= t2 = CEQ t1 t2 0
+t1 @= t2 = CEQ t1 t2
 
 
 (@<=) :: CTerm -> CTerm -> Constraint
-t1 @<= t2 = CLEQ t1 t2 0
+t1 @<= t2 = CLEQ t1 t2
 
 (@+) :: CTerm -> Int -> CTerm
 (CConst i) @+ j = CConst (i + j)
@@ -104,44 +110,42 @@ data GenState = GenState
     , recVars :: [Var]
     }
 
-type GenConstraints a = (Reader GenState) a--(CTree a -> CTree a)
+type GenConstraints a = (ReaderT GenState (Writer [Constraint])) a--(CTree a -> CTree a)
 
-runGenConstraints :: GenConstraints a -> a
-runGenConstraints m = runReader m (GenState 1 1 [])
+runGenConstraints :: GenConstraints a -> (a, [Constraint])
+runGenConstraints m = runWriter $ runReaderT m (GenState 1 1 [])
 
 
 {-
 TODO: Annotate each node of the tree with the appropriate delay
 -}
-constraints :: Expr -> GenConstraints (CTerm, [Constraint])
+constraints :: Expr -> GenConstraints CTerm
 constraints = \case
     (Var x) -> do
-        s <- ask
-        let d = currentDelay s
-        -- let xt = if x `elem` (recVars s) then (CConst 1) else (CVar x)
-        return (CVar x @+ d, [])
-    (Const _) -> return (CConst 0, [])
+        d <- asks currentDelay
+        return $ CVar x @+ d
+    (Const _) -> return $ CConst 0
     (Check e) -> constraints e
     (If c t f) -> do
-        (cc, cs) <-  constraints c
-        (tt, ts) <- constraints t
-        (ff, fs) <- constraints f
-        return (max' cc (max' tt ff), cs ++ ts ++ fs)
+        cc <-  constraints c
+        tt <- constraints t
+        ff <- constraints f
+        return $ max' cc (max' tt ff)
     (Next e) -> nextDepth (constraints e)
     (Fby l r) -> do
-        (ll, ls) <- constraints l
-        (rr, rs) <- fbyRhs (constraints r)
+        ll <- constraints l
+        rr<- fbyRhs (constraints r)
         d <- asks fbyDepth
-        return (ll, [rr @<= (ll @+ d)] ++ ls ++ rs)
+        tell [rr @<= (ll @+ d)]
+        return ll
     (Where body bs) -> do
-        cbs <- fmap join $ traverse whereConstraints bs
-        (bb, bs) <- constraints body
-        return (bb, bs ++ cbs)
-    (App _ _) -> return (CConst 0,[])
+        traverse_ whereConstraints bs
+        constraints body
+    (App _ _) -> return $ CConst 0
     (Binop _ l r) -> do
-        (ll, ls) <- constraints l
-        (rr, rs) <- constraints r
-        return (max' ll rr, ls ++ rs)
+        ll <- constraints l
+        rr <- constraints r
+        return $ max' ll rr
     where
         nextDepth :: GenConstraints a -> GenConstraints a
         nextDepth = local (\s -> s { currentDelay = 1 + (currentDelay s)})
@@ -149,10 +153,10 @@ constraints = \case
         fbyRhs :: GenConstraints a -> GenConstraints a
         fbyRhs = local (\s -> s { fbyDepth = 1 + (fbyDepth s) })
 
-        whereConstraints :: (Var, Expr) -> GenConstraints [Constraint]
+        whereConstraints :: (Var, Expr) -> GenConstraints ()
         whereConstraints (v,e) = do
-            (ee, es) <- local (\s -> s { recVars = v:(recVars s) }) (constraints e)
-            return $ [CVar v @= ee] ++ es
+            ee <- local (\s -> s { recVars = v:(recVars s) }) (constraints e)
+            tell [CVar v @= ee]
 
 genConstraints :: Function -> [Constraint]
 genConstraints (Function n args body) = snd $ runGenConstraints $ constraints body
