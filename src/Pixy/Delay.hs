@@ -20,8 +20,8 @@ import Pixy.Syntax
 data SolverError = UndefinedVariable Var
     deriving (Show)
 
-newtype Solver s a = Solver { unSolver :: StateT (SolverState s) (ExceptT [SolverError] []) a }
-    deriving (Functor, Applicative, Monad, Alternative, MonadPlus, MonadState (SolverState s), MonadError [SolverError])
+newtype Solver s a = Solver { unSolver :: StateT (SolverState s) [] a }
+    deriving (Functor, Applicative, Monad, Alternative, MonadPlus, MonadState (SolverState s))
 
 data SolverVar s
     = Gen Int
@@ -37,8 +37,8 @@ type SolverConstraint s = Solver s ()
 initSolverState :: SolverState s
 initSolverState = SolverState { varSupply = 0, varMap = Map.empty }
 
-runSolver :: (forall s . Solver s a) -> [Either [SolverError] a]
-runSolver s = runExceptT $ evalStateT (unSolver s) initSolverState
+runSolver :: (forall s . Solver s a) -> [a]
+runSolver s = evalStateT (unSolver s) initSolverState
 
 maxDepth :: Int
 maxDepth = 100
@@ -132,15 +132,15 @@ checkVar :: Var -> Solver s (SolverExpr s)
 checkVar x = do
     s <- get
     let vm = varMap s
-    if (Bound x) `Map.member` vm then return (SVar $ Bound x)
-    else throwError $ [UndefinedVariable x]
+    guard $ (Bound x) `Map.member` vm
+    return (SVar $ Bound x)
 
 varsLabelling :: [SolverVar s] -> Solver s [(Var, Int)]
 varsLabelling vs = (mapMaybe getVar) <$> mapM label vs
     where
         label var = do
             vals <- domain var
-            val <- Solver . lift . lift $ IntSet.toList vals
+            val <- Solver . lift $ IntSet.toList vals
             var `hasValue` val
             return (var, val)
         
@@ -319,7 +319,7 @@ constraints = \case
             ee <- constraints e
             lift $ lift (v #== ee)
 
-genConstraints :: Function -> [Either [SolverError] [(Var, Int)]]
+genConstraints :: Function -> [[(Var, Int)]]
 genConstraints (Function n args body) = runSolver $ do
     vargs <- bounds args [0..maxDepth]
     (_, vars) <- runCM $ constraints body

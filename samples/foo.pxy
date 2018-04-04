@@ -1,5 +1,3 @@
-foo() = n where {n = 1 fby n}
-
--- foo(y) = if (next y) then n else (n + 1) where {
---     n = 1 fby (n + 1)
--- }
+foo() = x where {
+    x = n where {n = 1 fby n}
+}
