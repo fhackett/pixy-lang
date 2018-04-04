@@ -5,6 +5,7 @@ import System.Exit
 import Control.Monad
 import System.Console.ANSI
 import Options.Applicative
+import Data.Foldable (traverse_)
 import Data.Semigroup ((<>))
 
 import Pixy.Eval
@@ -55,7 +56,7 @@ exec o = do
             if dumpConstraints o then do
                 let cs = genConstraints =<< fs
                 putStrLn "--[Constraints]--"
-                mapM_ (putStrLn . pp) cs
+                traverse_ print cs
                 putStrLn "--[Reduced]--"
                 -- either (\e -> printErr ("Constraint Error:\n" ++ pp e ++ "\n")) (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
             else forM_ (go $ evalLoop fs (App "main" [])) display

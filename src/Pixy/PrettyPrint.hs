@@ -65,19 +65,15 @@ instance Pretty Expr where
 -- delay' :: CVar -> Doc
 -- delay' = delay . CVar
 
-instance Pretty CTerm where
-    ppr (CVar v) = text v
-    ppr (CPlus t i) = parens $ ppr t <+> text "+" <+> ppr i
-    ppr (CMax t1 t2) = text "max" <> parens (ppr t1 <> comma <+> ppr t2)
-    ppr (CConst k) = ppr k
+-- instance Pretty CTerm where
+--     ppr (CVar v) = text v
+--     ppr (CPlus t i) = parens $ ppr t <+> text "+" <+> ppr i
+--     ppr (CMax t1 t2) = text "max" <> parens (ppr t1 <> comma <+> ppr t2)
+--     ppr (CConst k) = ppr k
 
-instance Pretty Constraint where
-    ppr (CEQ t1 t2 i) = 
-        let b = ppr t1 <+> text "=" <+> ppr t2
-        in if i == 0 then b else b <+> text "+" <+> ppr i
-    ppr (CLEQ t1 t2 i) = 
-        let b = ppr t1 <+> text "<=" <+> ppr t2
-        in if i == 0 then b else b <+> text "+" <+> ppr i
+-- instance Pretty Constraint where
+--     ppr (CEQ t1 t2) = ppr t1 <+> text "=" <+> ppr t2
+--     ppr (CLEQ t1 t2) = ppr t1 <+> text "<=" <+> ppr t2
 -- instance Pretty Constraint where
 --     ppr (K x k) = delay' x <+> text "=" <+> ppr k
 --     ppr (E x y k) = 
