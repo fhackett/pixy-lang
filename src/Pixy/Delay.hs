@@ -232,8 +232,8 @@ l #<= r = do
     vr <- interpret r
     vl `leq` vr
 
-max' :: SolverExpr s -> SolverExpr s -> SolverExpr s
-max' = SMax
+max' :: [SolverExpr s] -> SolverExpr s
+max' = foldl1 SMax
 
 gen :: [Int] -> Solver s (SolverExpr s)
 gen d = SVar <$> genVar d
@@ -284,7 +284,7 @@ constraints = \case
         cc <-  constraints c
         tt <- constraints t
         ff <- constraints f
-        return $ max' cc (max' tt ff)
+        return $ max' [cc, tt, ff]
     (Next e) -> nextDepth (constraints e)
     (Fby l r) -> do
         ll <- constraints l
@@ -300,7 +300,7 @@ constraints = \case
     (Binop _ l r) -> do
         ll <- constraints l
         rr <- constraints r
-        return $ max' ll rr
+        return $ max' [ll, rr]
     where
         nextDepth :: CM s a -> CM s a
         nextDepth = local (\s -> s { currentDelay = 1 + (currentDelay s)})
