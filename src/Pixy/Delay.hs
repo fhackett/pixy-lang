@@ -17,15 +17,11 @@ import Data.List (foldl1)
 
 import Pixy.Syntax
 
-{-
-When dealing with a where =
-Replace all instances of the 
--}
+data SolverError = UndefinedVariable Var
+    deriving (Show)
 
--- Given a solver state, I can give you a list of all possible solver states and a's
--- SolverState s -> [(SolverState s,a)]
-newtype Solver s a = Solver { unSolver :: StateT (SolverState s) [] a }
-    deriving (Functor, Applicative, Monad, Alternative, MonadPlus, MonadState (SolverState s))
+newtype Solver s a = Solver { unSolver :: StateT (SolverState s) (ExceptT [SolverError] []) a }
+    deriving (Functor, Applicative, Monad, Alternative, MonadPlus, MonadState (SolverState s), MonadError [SolverError])
 
 data SolverVar s
     = Gen Int
@@ -41,8 +37,8 @@ type SolverConstraint s = Solver s ()
 initSolverState :: SolverState s
 initSolverState = SolverState { varSupply = 0, varMap = Map.empty }
 
-runSolver :: (forall s . Solver s a) -> [a]
-runSolver s = evalStateT (unSolver s) initSolverState
+runSolver :: (forall s . Solver s a) -> [Either [SolverError] a]
+runSolver s = runExceptT $ evalStateT (unSolver s) initSolverState
 
 maxDepth :: Int
 maxDepth = 100
@@ -132,13 +128,19 @@ leq = addBinaryConstraint $ \x y -> do
     when (dx /= dx') $ update x dx'
     when (dy /= dy') $ update y dy'
 
+checkVar :: Var -> Solver s (SolverExpr s)
+checkVar x = do
+    s <- get
+    let vm = varMap s
+    if (Bound x) `Map.member` vm then return (SVar $ Bound x)
+    else throwError $ [UndefinedVariable x]
 
 varsLabelling :: [SolverVar s] -> Solver s [(Var, Int)]
 varsLabelling vs = (mapMaybe getVar) <$> mapM label vs
     where
         label var = do
             vals <- domain var
-            val <- Solver . lift $ IntSet.toList vals
+            val <- Solver . lift . lift $ IntSet.toList vals
             var `hasValue` val
             return (var, val)
         
@@ -149,10 +151,18 @@ data SolverExpr s
     = SInt Int
     | SVar (SolverVar s)
     | SPlus (SolverExpr s) (SolverExpr s)
+    | SMinus (SolverExpr s) (SolverExpr s)
+    | STimes (SolverExpr s) (SolverExpr s)
+    | SAbs (SolverExpr s)
+    | SSignum (SolverExpr s)
     | SMax (SolverExpr s) (SolverExpr s)
 
 instance Num (SolverExpr s) where
     (+) = SPlus
+    (-) = SMinus
+    (*) = STimes
+    abs = SAbs
+    signum = SSignum
     -- TODO: The rest of the num methods
     fromInteger = SInt . fromInteger
 
@@ -160,7 +170,10 @@ interpret :: SolverExpr s -> Solver s (SolverVar s)
 interpret (SInt k) = genVar [k]
 interpret (SVar x) = return x
 interpret (SPlus l r) = interpretBinary (+) l r
--- TODO: Do we need to add extra constraints?
+interpret (SMinus l r) = interpretBinary (-) l r
+interpret (STimes l r) = interpretBinary (*) l r
+interpret (SAbs x) = interpretUnary abs x
+interpret (SSignum x) = interpretUnary signum x
 interpret (SMax l r) = interpretBinary max l r
 
 interpretBinary :: (Int -> Int -> Int) -> SolverExpr s -> SolverExpr s -> Solver s (SolverVar s)
@@ -178,12 +191,32 @@ interpretBinary op l r = do
     addConstraint v $ ncl >> ncr
     return v
 
+
 constraintBinary :: (Int -> Int -> Int -> Bool) -> SolverVar s -> SolverVar s -> SolverVar s -> SolverConstraint s
 constraintBinary pred x y z = do
     dx <- domain x
     dy <- domain y
     dz <- domain z
-    let dx' = IntSet.fromList [nx | nx <- IntSet.elems dx, ny <- IntSet.elems dy, nz <- IntSet.elems dz, pred nx ny nz ]
+    let dx' = IntSet.fromList [ nx | nx <- IntSet.elems dx, ny <- IntSet.elems dy, nz <- IntSet.elems dz, pred nx ny nz ]
+    guard $ not $ IntSet.null dx'
+    when (dx /= dx') $ update x dx'
+
+interpretUnary :: (Int -> Int) -> SolverExpr s -> Solver s (SolverVar s)
+interpretUnary op x = do
+    vx <- interpret x
+    dx <- domain vx
+    v <- genVar [ op nx | nx <- IntSet.elems dx ]
+    let pc = constraintUnary (\nv nx -> nv == op nx) v vx
+        ncx = constraintUnary (\nx nv -> nv == op nx) vx v
+    addConstraint vx $ pc
+    addConstraint v $ ncx
+    return v
+
+constraintUnary :: (Int -> Int -> Bool) -> SolverVar s -> SolverVar s -> SolverConstraint s
+constraintUnary pred x y = do
+    dx <- domain x
+    dy <- domain y
+    let dx' = IntSet.fromList [ nx | nx <- IntSet.elems dx, ny <- IntSet.elems dy, pred nx ny ]
     guard $ not $ IntSet.null dx'
     when (dx /= dx') $ update x dx'
 
@@ -198,9 +231,6 @@ l #<= r = do
     vl <- interpret l
     vr <- interpret r
     vl `leq` vr
-
-(#+) :: SolverExpr s -> SolverExpr s -> SolverExpr s
-l #+ r = SPlus l r
 
 max' :: SolverExpr s -> SolverExpr s -> SolverExpr s
 max' = SMax
@@ -246,7 +276,8 @@ constraints :: Expr -> CM s (SolverExpr s)
 constraints = \case
     (Var x) -> do
         d <- asks (SInt . currentDelay)
-        return $ (SVar $ Bound x) + d
+        x' <- lift $ lift $ checkVar x
+        return $ x' + d
     (Const _) -> return 0
     (Check e) -> constraints e
     (If c t f) -> do
@@ -288,7 +319,7 @@ constraints = \case
             ee <- constraints e
             lift $ lift (v #== ee)
 
-genConstraints :: Function -> [[(Var, Int)]]
+genConstraints :: Function -> [Either [SolverError] [(Var, Int)]]
 genConstraints (Function n args body) = runSolver $ do
     vargs <- bounds args [0..maxDepth]
     (_, vars) <- runCM $ constraints body
