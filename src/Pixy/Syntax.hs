@@ -17,6 +17,7 @@ data Binop
     | Minus
     | Times
     | Divide
+    | Modulo
     | Equals
     deriving (Show)
 

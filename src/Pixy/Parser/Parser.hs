@@ -42,6 +42,7 @@ operators =
       , binary "/" (Binop Divide) ]
     , [ binary "+" (Binop Plus)
       , binary "-" (Binop Minus) ]
+    , [ binary "%" (Binop Modulo) ]
     , [ binary "==" (Binop Equals) ]
     , [ binary "fby" Fby ]
     , [ prefix "?" Check ]

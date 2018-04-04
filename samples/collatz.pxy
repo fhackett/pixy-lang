@@ -1,0 +1,5 @@
+collatz(n) = c where {
+    c = n fby (if c % 2 == 0 then c/2 else 3*c + 1)
+}
+
+main() c where { c = collatz(9) }
