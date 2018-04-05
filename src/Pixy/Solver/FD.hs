@@ -260,8 +260,8 @@ x #> y = (x + 1) #>= y
 (#<) :: FDExpr s -> FDExpr s -> FDConstraint s
 x #< y = y #> x
 
-cmax :: FDExpr s -> FDExpr s -> FDExpr s
-cmax = Max
+cmax :: [FDExpr s] -> FDExpr s
+cmax = foldl1 Max
 
 new :: Domain -> FD s (FDExpr s)
 new d = Var <$> newVar d

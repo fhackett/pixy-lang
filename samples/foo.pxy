@@ -1,3 +1,5 @@
 foo() = x where {
     x = n where {n = 1 fby n}
 }
+
+main() = foo()
