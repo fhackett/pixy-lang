@@ -145,11 +145,14 @@ geq = addBinaryConstraint $ \x y -> do
                 updateBounds x (max dxl dyl) dxu 
                 updateBounds y dyl (min dxu dyu)
 
+-- | Attempts to solve a series of expressions
 varsLabel :: [FDVar s] -> FD s [Int]
 varsLabel = mapM label
     where
         label var = do
             vals <- domain var
+            -- What we do is try constraining the variable to each of the values
+            -- in its domain, and propagate that constraint, searching for a series of values that satisfy the constraints
             val <- FD . lift $ Domain.toList vals
             var `hasValue` val
             return val
@@ -221,8 +224,8 @@ pmax x y z = do
     if | dyl > dxu -> eq z y
        | dyu < dxl -> eq z x
        | otherwise -> do
-        let dz' = Domain.removeGreater (max dxu dyu) dz
-        putDomain z dz dz'
+            let dz' = Domain.removeGreater (max dxu dyu) dz
+            putDomain z dz dz'
 
 updateBounds :: FDVar s -> Bound -> Bound -> FDConstraint s
 updateBounds x dxl' dxu' = do

@@ -25,6 +25,7 @@ data Bound
     = N !Int    -- ^ Some integer bound
     | Inf       -- ^ Infinium of Z (negative infinity)
     | Sup       -- ^ Supremum of Z (positve infinity)
+    deriving (Show)
 
 instance Eq Bound where
     (==) = bequal 
@@ -95,6 +96,7 @@ data Domain
     = Empty                         -- ^ The empty domain
     | Split !Int !Domain !Domain    -- ^ Split on some integer N, with Left and Right domains whose elements are all greater than or less than N, respectively
     | Range !Bound !Bound               -- ^ An interval with bounds From and To
+    deriving (Show)
 
 instance Eq Domain where
     d1 == d2 = dequal d1 d2
@@ -219,7 +221,7 @@ removeGreater n (Split s l r)
             r' -> Split s l r'
     | otherwise = removeGreater n l
 removeGreater n (Range from to) 
-    | from >= n = Empty
+    | from > n = Empty
     | otherwise = Range from (min n to)
 
 removeLesser :: Bound -> Domain -> Domain
@@ -231,7 +233,7 @@ removeLesser n (Split s l r)
             l' -> Split s l' r
     | otherwise = removeLesser n r
 removeLesser n (Range from to)
-    | to <= n = Empty
+    | to < n = Empty
     | otherwise = Range (max n from) to
 
 

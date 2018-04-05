@@ -60,7 +60,7 @@ getFunction n = do
 varDelay :: Var -> Delay s (FDExpr s)
 varDelay x = do
     s <- ask
-    if x `elem` (whereVars s) 
+    if x `elem` whereVars s
         then return (int $ currentDelay s - 1)
         else return (int $ currentDelay s)
 
@@ -86,7 +86,6 @@ constraints = \case
         return ll
     (Where body bs) -> do
         traverse_ whereConstraints =<< traverse bindVar bs
-        -- If the variable was bound from within the where clause, we don't need to add the extra delay
         whereBody bs (constraints body)
     (App n args) -> do
         f <- getFunction n
@@ -127,25 +126,15 @@ constraints = \case
 genConstraints :: [Function] -> Maybe [(Var, Int)]
 genConstraints fs = tryHead $ runFD $ do
     let (Just (Function _ _ body)) = find (\(Function n _ _) -> n == "main") fs
-    (_, vars) <- runDelay (constraints body) fs
+    (mdelay, vars) <- runDelay (constraints body) fs
+    mdelay #== 0
     let (vs, es) = unzip $ Map.assocs vars
     zip vs <$> label es
     where
         tryHead :: [a] -> Maybe a
         tryHead (x:_) = Just x
         tryHead [] = Nothing
--- genConstraints :: Function -> Maybe [(Var, Int)]
--- genConstraints (Function n args body) = tryHead $ runFD $ do
---     vargs <- Map.fromList . zip args <$> news (length args) (Domain.range 0 10000)
---     (_, vars) <- runDelay (constraints body) vargs
---     return undefined
---     let (vs, es) = unzip $ Map.assocs $ Map.union vargs vars
---     zip vs <$> label es
---     -- label (Map.elems vargs ++ Map.elems vars)
---     where
---         tryHead :: [a] -> Maybe a
---         tryHead (x:_) = Just x
---         tryHead [] = Nothing
+
 
 -- To compute delays for the entire program, you need to start at the main
 -- function and walk through
