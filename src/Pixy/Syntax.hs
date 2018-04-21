@@ -45,9 +45,9 @@ data ExprS
     | ConstS Value
     | IfS ExprS ExprS ExprS
     | CheckS ExprS
-    | FbyS Bool ExprS ExprS
-    | NextS Bool Value ExprS
-    | WhereS ExprS (Map Var (ExprS, Value))
+    | FbyS Int ExprS ExprS
+    | NextS Value ExprS
+    | WhereS ExprS (Map Var (ExprS, Int, Value))
     | AppS ExprS (Map Var ExprS)
     | BinopS Binop ExprS ExprS
     deriving (Show)

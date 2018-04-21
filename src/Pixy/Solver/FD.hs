@@ -162,13 +162,13 @@ data FDExpr s
     | Var !(FDVar s)
     | Plus !(FDExpr s) !(FDExpr s)
     | Minus !(FDExpr s) !(FDExpr s)
-    -- | Times !(FDExpr s) !(FDExpr s)
+    | Times !(FDExpr s) !(FDExpr s)
     | Max !(FDExpr s) !(FDExpr s)
 
 instance Num (FDExpr s) where
     (+) = Plus
     (-) = Minus
-    -- (*) = Times
+    (*) = Times
     fromInteger = Int . fromInteger
 
 int :: Int -> FDExpr s
@@ -226,6 +226,13 @@ pmax x y z = do
        | otherwise -> do
             let dz' = Domain.removeGreater (max dxu dyu) dz
             putDomain z dz dz'
+
+ptimes :: FDVar s -> FDVar s -> FDVar s -> FDConstraint s
+ptimes x y z = do
+    (dx, dxl, dxu) <- domain' x
+    (dy, dyl, dyu) <- domain' y
+    (dz, dzl, dzu) <- domain' z
+    return undefined
 
 updateBounds :: FDVar s -> Bound -> Bound -> FDConstraint s
 updateBounds x dxl' dxu' = do

@@ -91,7 +91,7 @@ eval (FbyS latch l r) =
         return (FbyS True l' r', rVal)
     else do
         (l', lVal) <- eval l
-        (r') <- chokeEval r
+        r' <- chokeEval r
         case lVal of
             VNil -> return (FbyS False l' r', VNil)
             v -> return (FbyS True l' r', v)
@@ -125,6 +125,7 @@ eval (BinopS op l r) = do
         (Divide, VInt i, VInt j)  ->
             if j /= 0 then return $ VInt (i `div` j)
             else throwError $ DivideByZero
+        (Modulo, VInt i, VInt j) -> return $ VInt (i `mod` j)
         (Equals, VInt i, VInt j) -> return $ VBool (i == j)
         (_, VNil, VNil) -> return VNil
         (op, lVal, rVal) -> throwError $ OperandMismatch op lVal rVal

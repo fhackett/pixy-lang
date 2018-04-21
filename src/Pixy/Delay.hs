@@ -64,37 +64,57 @@ varDelay x = do
         then return (int $ currentDelay s - 1)
         else return (int $ currentDelay s)
 
-constraints :: Expr -> Delay s (FDExpr s)
+-- init :: (MonadReader [Function] m, MonadError EvalError m) => Expr -> m ExprS
+-- init (Var x) = return $ VarS x
+-- init (Const k) = return $ ConstS k
+-- init (If c t f) = IfS <$> init c <*> init t <*> init f
+-- init (Check e) = CheckS <$> init e
+-- init (Fby l r) = FbyS False <$> init l <*> init r
+-- init (Next e) = NextS False VNil <$> init e
+-- init (Where body bs) = do
+--     bs' <- mapM init $ Map.fromList bs
+--     body' <- init body
+--     return $ WhereS body' ((,VNil) <$> bs')
+-- init (App fname args) = do
+--     f <- find (\(Function n _ _) -> n == fname) <$> ask
+--     args' <- init `mapM` args
+--     case f of
+--         Just (Function _ argNames e) -> AppS <$> init e <*> pure (Map.fromList $ zip argNames args')
+--         Nothing -> throwError $ UndefinedFunction fname
+-- init (Binop b l r) = BinopS b <$> init l <*> init r
+
+constraints :: Expr -> Delay s (FDExpr s, ExprS)
 constraints = \case
     (Var x) -> do
         vx <- getVar x
         d <- varDelay x
-        return $ vx + d
-    (Const _) -> return 0
+        return $ (vx + d, VarS x)
+    (Const k) -> return (0, ConstS k)
     (Check e) -> constraints e
     (If c t f) -> do
-        cc <- constraints c
-        tt <- constraints t
-        ff <- constraints f
-        return $ cmax [cc, tt, ff]
+        (cc, c') <- constraints c
+        (tt, t') <- constraints t
+        (ff, f') <- constraints f
+        return (cmax [cc, tt, ff], IfS c' t' f')
     (Next e) -> nextDepth (constraints e)
     (Fby l r) -> do
-        ll <- constraints l
-        rr <- fbyRhs (constraints r)
+        (ll, l') <- constraints l
+        (rr, r') <- fbyRhs (constraints r)
         d <- asks (int . fbyDepth)
         lift $ lift (rr #<= ll + d)
-        return ll
+        return (ll, FbyS undefined l' r')
     (Where body bs) -> do
-        traverse_ whereConstraints =<< traverse bindVar bs
-        whereBody bs (constraints body)
+        bs' <- Map.fromList <$> (traverse whereConstraints =<< traverse bindVar bs)
+        (bodyDelay, body') <- whereBody bs (constraints body)
+        return (bodyDelay, WhereS body' bs')
     (App n args) -> do
         f <- getFunction n
         vargs <- traverse constraints args
         fConstraints f vargs
-    (Binop _ l r) -> do
-        ll <- constraints l
-        rr <- constraints r
-        return $ cmax [ll, rr]
+    (Binop op l r) -> do
+        (ll, l') <- constraints l
+        (rr, r') <- constraints r
+        return (cmax [ll, rr], BinopS op l' r')
     where
         nextDepth :: Delay s a -> Delay s a
         nextDepth = local (\s -> s { currentDelay = 1 + (currentDelay s)})
@@ -102,32 +122,34 @@ constraints = \case
         fbyRhs :: Delay s a -> Delay s a
         fbyRhs = local (\s -> s { fbyDepth = 1 + (fbyDepth s) })
 
-        bindVar :: (Var, Expr) -> Delay s (FDExpr s, Expr)
+        bindVar :: (Var, Expr) -> Delay s (Var, FDExpr s, Expr)
         bindVar (v, e) = do
             v' <- lift $ lift $ new $ Domain.range 0 Domain.sup
             putVar v v'
-            return (v', e)
+            return (v, v', e)
 
-        whereConstraints :: (FDExpr s, Expr) -> Delay s ()
-        whereConstraints (v,e) = do
-            ee <- constraints e
-            lift $ lift (v #== ee)
+        whereConstraints :: (Var, FDExpr s, Expr) -> Delay s (Var, (ExprS, Int, Value))
+        whereConstraints (v, v', e) = do
+            (ee, e') <- constraints e
+            lift $ lift (v' #== ee)
+            return (v, (e', undefined, VNil))
 
         whereBody :: [(Var, Expr)] -> Delay s a -> Delay s a
         whereBody bs = local (\s -> s { whereVars = fst <$> bs })
 
-        fConstraints :: Function -> [FDExpr s] -> Delay s (FDExpr s)
+        fConstraints :: Function -> [(FDExpr s, ExprS)] -> Delay s (FDExpr s, ExprS)
         fConstraints (Function n argnames body) args = do
             let vargs = Map.fromList $ zip argnames args
             s <- get
-            put $ Map.union vargs s
-            constraints body
+            put $ Map.union (fmap fst vargs) s
+            (fdelay, body') <- constraints body
+            return (fdelay, AppS body' (fmap snd vargs))
 
 genConstraints :: [Function] -> Maybe [(Var, Int)]
 genConstraints fs = tryHead $ runFD $ do
     let (Just (Function _ _ body)) = find (\(Function n _ _) -> n == "main") fs
     (mdelay, vars) <- runDelay (constraints body) fs
-    mdelay #== 0
+    -- mdelay #== 0
     let (vs, es) = unzip $ Map.assocs vars
     zip vs <$> label es
     where
@@ -136,8 +158,12 @@ genConstraints fs = tryHead $ runFD $ do
         tryHead [] = Nothing
 
 
--- To compute delays for the entire program, you need to start at the main
--- function and walk through
--- when you hit a function application, you compute the delay of the function,
--- binding the arguments to their actual values
--- The next step is to acutally place the delays on the tree nodes
+{- 
+The next step is to actually place the delays on the tree nodes
+The important ones are 
+1) the RHS of fbys
+2) the delay of variables within a where
+
+when evaluating, you choke evaluate, and count down the delay counter, until
+the delay hits zero
+-}
