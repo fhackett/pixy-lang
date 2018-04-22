@@ -44,12 +44,13 @@ operators =
       , binary "-" (Binop Minus) ]
     , [ binary "%" (Binop Modulo) ]
     , [ binary "==" (Binop Equals) ]
-    , [ binary "fby" Fby ]
+    , [ binaryr "fby" Fby ]
     , [ prefix "?" Check ]
     , [ P.Postfix _where ]
     ]
     where
         binary name f = P.InfixL (f <$ symbol name)
+        binaryr name f = P.InfixR (f <$ symbol name)
         prefix name f = P.Prefix (f <$ symbol name)
         _where = flip Where <$> (reserved "where" *> brackets (P.some ((,) <$> identifier <*> (symbol "=" *> expr))))
         -- _where = L.indentBlock scn $ do

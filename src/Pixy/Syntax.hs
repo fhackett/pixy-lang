@@ -5,6 +5,7 @@ module Pixy.Syntax where
 import Data.Void
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
+import Data.STRef
 
 type Var = String
 type FName = String
@@ -45,10 +46,17 @@ data ExprS
     | ConstS Value
     | IfS ExprS ExprS ExprS
     | CheckS ExprS
-    | FbyS Int ExprS ExprS
-    | NextS Value ExprS
-    | WhereS ExprS (Map Var (ExprS, Int, Value))
+    | FbyS Bool ExprS ExprS
+    | NextS ExprS
+    | WhereS ExprS (Map Var VarInfo)
     | AppS ExprS (Map Var ExprS)
     | BinopS Binop ExprS ExprS
+    deriving (Show)
+
+data VarInfo = VarInfo 
+    { varExpr :: ExprS
+    , varDelay :: Int
+    , varBuffer :: [Value]
+    }
     deriving (Show)
 

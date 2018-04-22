@@ -64,11 +64,11 @@ exec o = do
             Just n -> take n
             Nothing -> id
 
-display :: Either EvalError Value ->  IO ()
-display (Left err) = showErr err
-display (Right (VInt k)) = print k 
-display (Right (VBool b)) = print b
-display (Right (VNil)) = putStrLn "nil"
+display :: Value ->  IO ()
+-- display (Left err) = showErr err
+display (VInt k) = print k 
+display (VBool b) = print b
+display (VNil) = putStrLn "nil"
 
 showErr :: (Show e) => e -> IO ()
 showErr err = printErr $ show err ++ "\n"
