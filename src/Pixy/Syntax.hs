@@ -20,6 +20,18 @@ data Binop
     | Divide
     | Modulo
     | Equals
+    | NotEquals
+    | GreaterThan
+    | GreaterThanEquals
+    | LessThan
+    | LessThanEquals
+    | And
+    | Or
+    deriving (Show)
+
+data Unary
+    = Not
+    | Trace
     deriving (Show)
 
 data Value 
@@ -38,6 +50,7 @@ data Expr
     | Where Expr [(Var, Expr)]
     | App FName [Expr]
     | Binop Binop Expr Expr
+    | Unary Unary Expr
     deriving (Show)
 
 -- AST decorated with the state needed for execution
@@ -51,6 +64,7 @@ data ExprS
     | WhereS ExprS (Map Var VarInfo)
     | AppS ExprS (Map Var ExprS)
     | BinopS Binop ExprS ExprS
+    | UnaryS Unary ExprS
     deriving (Show)
 
 data VarInfo = VarInfo 

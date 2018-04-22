@@ -1,0 +1,7 @@
+main() = prime where {
+    canidate = 5 fby (if (canidate % odds == 0 || odds * odds > canidate) then canidate + 2 else canidate)
+    odds = 3 fby (if canidate % odds == 0 || odds * odds > canidate then 3 else odds + 2)
+    isPrime = if canidate % odds == 0 || odds * odds > canidate then (canidate % odds != 0) else nil
+    dc = canidate
+    prime = if ?isPrime && isPrime then dc else nil
+}

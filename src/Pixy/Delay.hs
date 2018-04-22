@@ -98,6 +98,7 @@ constraints = \case
         ll <- constraints l
         rr <- constraints r
         return (cmax [ll, rr])
+    (Unary op e) -> constraints e
     where
         nextDepth :: Delay s a -> Delay s a
         nextDepth = local (\s -> s { currentDelay = 1 + (currentDelay s)})

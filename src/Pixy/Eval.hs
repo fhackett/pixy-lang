@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Pixy.Eval where
 
 import Prelude hiding (init)
@@ -62,7 +63,8 @@ init = \case
         case f of
             Just (Function _ argNames e) -> AppS <$> init e <*> pure (Map.fromList $ zip argNames args')
             Nothing -> error $ "init: Undefined Function " ++ fname
-    (Binop b l r) -> BinopS b <$> init l <*> init r
+    (Binop op l r) -> BinopS op <$> init l <*> init r
+    (Unary op e) -> UnaryS op <$> init e
     where
         initVar :: (MonadRWS [Function] MaxNat [Int] m) => (Var, Expr) -> m (Var, VarInfo)
         initVar (v,e) = do
@@ -84,6 +86,7 @@ runInit fs = case genConstraints fs of
 
 withBindings :: (MonadReader (Map Var [Value]) m) => Map Var VarInfo -> m a -> m a
 withBindings bs = local (Map.union (fmap varBuffer bs))
+-- withBindings bs = local (Map.union (Map.mapWithKey (\v vi -> let vb = varBuffer vi in trace (show v ++ ":" ++ show vb) vb) bs))
 
 eval :: (MonadReader (Map Var [Value]) m) => ExprS -> m (ExprS, Value)
 eval = \case
@@ -104,8 +107,8 @@ eval = \case
         (CheckS e) -> do
             (e', eVal) <- eval e
             case eVal of
-                VNil -> return (CheckS e', VBool True)
-                _ -> return (CheckS e', VBool False)
+                VNil -> return (CheckS e', VBool False)
+                _ -> return (CheckS e', VBool True)
         (FbyS latch l r) -> 
             if latch then do
                 l' <- chokeEval l
@@ -131,18 +134,12 @@ eval = \case
         (BinopS op l r) -> do
             (l', lVal) <- eval l
             (r', rVal) <- eval r
-            resVal <- case (op, lVal, rVal) of
-                (Plus, VInt i, VInt j) -> return $ VInt (i + j)
-                (Minus, VInt i, VInt j) -> return $ VInt (i - j)
-                (Times, VInt i, VInt j) -> return $ VInt (i * j)
-                (Divide, VInt i, VInt j)  ->
-                    if j /= 0 then return $ VInt (i `div` j)
-                    else error "Divide by zero"
-                (Modulo, VInt i, VInt j) -> return $ VInt (i `mod` j)
-                (Equals, VInt i, VInt j) -> return $ VBool (i == j)
-                (_, VNil, VNil) -> return VNil
-                (op, lVal, rVal) -> error $ "Operand Mismatch: " ++ show op ++ " " ++ show lVal ++ " " ++ show rVal --throwError $ OperandMismatch op lVal rVal
+            let resVal = evalBinop op lVal rVal
             return (BinopS op l' r', resVal)
+        (UnaryS op e) -> do
+            (e', eVal) <- eval e
+            let resVal = evalUnary op eVal
+            return (UnaryS op e', resVal)
     where
         lookupValue :: (MonadReader (Map Var [Value]) m) => Var -> m Value
         lookupValue x = do
@@ -154,6 +151,32 @@ eval = \case
 
         nextValue :: (MonadReader (Map Var [Value]) m) => m a -> m a
         nextValue = local (fmap tail)
+
+        evalBinop :: Binop -> Value -> Value -> Value
+        evalBinop Plus (VInt i) (VInt j) = VInt (i + j)
+        evalBinop Minus (VInt i) (VInt j) = VInt (i - j)
+        evalBinop Times (VInt i) (VInt j) = VInt (i * j)
+        evalBinop Divide (VInt i) (VInt j) = VInt (i `div` j)
+        evalBinop Modulo (VInt i) (VInt j) = VInt (i `mod` j)
+        evalBinop Or (VBool True) _ = VBool True
+        evalBinop Or (VBool False) (VBool j) = VBool j
+        evalBinop And (VBool False) _ = VBool False
+        evalBinop And (VBool True) (VBool j) = VBool j
+        evalBinop Equals (VInt i) (VInt j) = VBool (i == j)
+        evalBinop NotEquals (VInt i) (VInt j) = VBool (i /= j)
+        evalBinop LessThanEquals (VInt i) (VInt j) = VBool (i <= j)
+        evalBinop LessThan (VInt i) (VInt j) = VBool (i < j)
+        evalBinop GreaterThanEquals (VInt i) (VInt j) = VBool (i >= j)
+        evalBinop GreaterThan (VInt i) (VInt j) = VBool (i > j)
+        evalBinop op lVal rVal = error $ "Operand Mismatch: " ++ show op ++ " " ++ show lVal ++ " " ++ show rVal --throwError $ OperandMismatch op lVal rVal
+                -- (op, lVal, rVal) -> 
+                -- (Modulo, VInt i, VInt j) -> VInt (i `mod` j)
+                -- (Equals, VInt i, VInt j) -> VBool (i == j)
+                -- (Equals, VInt i, VInt j) -> VBool (i == j)
+                -- (_, VNil, VNil) -> il
+        evalUnary Not (VBool b) = VBool (not b)
+        evalUnary Trace v = trace ("Trace:" ++ show v) v
+        evalUnary op e = error $ "Operand Mismatch: " ++ show op ++ " " ++ show e
 
         argBindings :: Map Var (ExprS, Value) -> Map Var VarInfo
         argBindings = fmap (\(e,v) -> VarInfo e 0 [v]) 
@@ -181,6 +204,7 @@ chokeEval = \case
         f' <- withBindings (argBindings args') (chokeEval f)
         return $ AppS f' args'
     (BinopS op l r) -> BinopS op <$> chokeEval l <*> chokeEval r
+    (UnaryS op e) -> UnaryS op <$> chokeEval e
     where
         argBindings :: Map Var ExprS -> Map Var VarInfo
         argBindings = fmap (\e -> VarInfo e 0 [VNil])

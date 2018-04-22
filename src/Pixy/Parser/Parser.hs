@@ -33,6 +33,7 @@ term = P.choice
     , Const <$> value
     , If <$> (reserved "if" *> expr) <*> (reserved "then" *> expr) <*> (reserved "else" *> expr)
     , Next <$> (reserved "next" *> expr)
+    , Unary Trace <$> (reserved "trace" *> expr)
     , parens expr
     ] <?> "expression"
 
@@ -43,9 +44,17 @@ operators =
     , [ binary "+" (Binop Plus)
       , binary "-" (Binop Minus) ]
     , [ binary "%" (Binop Modulo) ]
-    , [ binary "==" (Binop Equals) ]
-    , [ binaryr "fby" Fby ]
     , [ prefix "?" Check ]
+    , [ binary "==" (Binop Equals) 
+    ,   binary "!=" (Binop NotEquals) 
+    ,   binary "<=" (Binop LessThanEquals) 
+    ,   binary "<" (Binop LessThan) 
+    ,   binary ">=" (Binop GreaterThanEquals) 
+    ,   binary ">" (Binop GreaterThan) ]
+    , [ binary "||" (Binop Or) 
+      , binary "&&" (Binop And) ]
+    , [ prefix "!" (Unary Not) ]
+    , [ binaryr "fby" Fby ]
     , [ P.Postfix _where ]
     ]
     where

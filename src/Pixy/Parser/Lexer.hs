@@ -90,5 +90,6 @@ reservedWords =
     , "else"
     , "true"
     , "false"
+    , "trace"
     ]
 
