@@ -11,8 +11,6 @@ import Data.Foldable (traverse_)
 
 import qualified Data.Map as Map
 import Data.Map (Map, (!?))
-import qualified Data.IntSet as IntSet
-import Data.IntSet (IntSet)
 import Data.List (find)
 
 import Pixy.Syntax

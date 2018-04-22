@@ -53,8 +53,8 @@ init = \case
     (Fby l r) -> FbyS False <$> init l <*> init r
     (Next e) -> NextS <$> censor (+1) (init e)
     (Where body bs) -> do
-        (body', b) <- listen (init body)
         bs' <- Map.fromList <$> traverse initVar bs
+        (body', b) <- listen (init body)
         writer (WhereS body' bs', b)
     (App fname args) -> do
         f <- find (\(Function n _ _) -> n == fname) <$> ask
@@ -141,7 +141,7 @@ eval = \case
                 (Modulo, VInt i, VInt j) -> return $ VInt (i `mod` j)
                 (Equals, VInt i, VInt j) -> return $ VBool (i == j)
                 (_, VNil, VNil) -> return VNil
-                (op, lVal, rVal) -> error "Operand Mismatch" --throwError $ OperandMismatch op lVal rVal
+                (op, lVal, rVal) -> error $ "Operand Mismatch: " ++ show op ++ " " ++ show lVal ++ " " ++ show rVal --throwError $ OperandMismatch op lVal rVal
             return (BinopS op l' r', resVal)
     where
         lookupValue :: (MonadReader (Map Var [Value]) m) => Var -> m Value
