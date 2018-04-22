@@ -4,5 +4,5 @@ avg(x) = sum/count where {
 }
 
 main() = avg(n) where {
-    n = 1 fby 2*n
+    n = 2 fby (n + 2)
 }

@@ -67,25 +67,6 @@ getVarDelay x = do
         then return (int $ currentDelay s - 1)
         else return (int $ currentDelay s)
 
--- init :: (MonadReader [Function] m, MonadError EvalError m) => Expr -> m ExprS
--- init (Var x) = return $ VarS x
--- init (Const k) = return $ ConstS k
--- init (If c t f) = IfS <$> init c <*> init t <*> init f
--- init (Check e) = CheckS <$> init e
--- init (Fby l r) = FbyS False <$> init l <*> init r
--- init (Next e) = NextS False VNil <$> init e
--- init (Where body bs) = do
---     bs' <- mapM init $ Map.fromList bs
---     body' <- init body
---     return $ WhereS body' ((,VNil) <$> bs')
--- init (App fname args) = do
---     f <- find (\(Function n _ _) -> n == fname) <$> ask
---     args' <- init `mapM` args
---     case f of
---         Just (Function _ argNames e) -> AppS <$> init e <*> pure (Map.fromList $ zip argNames args')
---         Nothing -> throwError $ UndefinedFunction fname
--- init (Binop b l r) = BinopS b <$> init l <*> init r
-
 constraints :: Expr -> Delay s (FDExpr s)
 constraints = \case
     (Var x) -> do
@@ -143,7 +124,7 @@ constraints = \case
         fConstraints :: Function -> [(FDExpr s)] -> Delay s (FDExpr s)
         fConstraints (Function n argnames body) args = 
             let vargs = Map.fromList $ zip argnames args
-            in local (\s -> s { varDelays = Map.union vargs (varDelays s)}) (constraints body)
+            in local (\s -> s { varDelays = Map.union vargs (varDelays s), whereVars = argnames}) (constraints body)
 
 genConstraints :: [Function] -> Maybe [Int]
 genConstraints fs = tryHead $ runFD $ do
