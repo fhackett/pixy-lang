@@ -1,0 +1,583 @@
+\documentclass{scrartcl}
+
+\usepackage{listings}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{tabularx}
+\usepackage{ragged2e}
+\usepackage{hyperref}
+
+\usepackage{syntax}
+
+\DeclareMathOperator{\ifop}{if}
+\DeclareMathOperator{\thenop}{then}
+\DeclareMathOperator{\elseop}{else}
+\DeclareMathOperator{\lenop}{len}
+\DeclareMathOperator{\nil}{nil}
+\DeclareMathOperator{\fby}{fby}
+\DeclareMathOperator{\where}{where}
+\DeclareMathOperator{\nextop}{next}
+
+\DeclareMathOperator{\numtype}{\mathbb{R}}
+
+\DeclareMathOperator{\ceval}{\overset{C}{\smash{\Downarrow}}}
+
+\DeclareMathOperator{\initrel}{\overset{init}{\Rightarrow}}
+\DeclareMathOperator{\flattenrel}{\overset{flatten}{\Rightarrow}}
+
+\DeclareMathOperator{\buffer}{\mathbf{buffer}}
+
+\makeindex
+
+\begin{document}
+    \title{Pixy progress report}
+    \author{A. Finn Hackett, Reed Mullanix}
+    
+    \maketitle
+    
+    \tableofcontents
+    
+    \section{Introduction}
+    
+    Our initial goal was to adapt the Lucid programming language to have first-class support for realtime programming, while retaining its nature as a general purpose language.
+    
+    Our progress so far is that we have redesigned the language's evaluation semantics from the ground up to create Pixy, a language that shares a lot of syntax and surface-level semantics with Lucid. Pixy is however at its core a very different language.
+    
+    \section{Pixy's programming model}
+    
+    We have defined Pixy's operational semantics in terms of nested state machines - any Pixy expression will evaluate to a state machine that will operate asynchronously, yielding a value at each timestep $t \in \mathbb{N}$.
+    This approach allows for a much finer-grained control of the asynchronous relationships between dataflow nodes than Lucid's original lazy computation model, at the cost of some flexibility.
+    
+    Specifically, Pixy does not support nested iteration in that same way that Lucid does, nor do custom operators enjoy the same degree of freedom as they did in Lucid.
+    
+    To introduce Pixy's supported subset of Lucid, here is Pixy's grammar:
+    
+    \begin{grammar}
+        <expr> ::= <number>
+        \alt <var>
+        \alt <bool>
+        \alt "nil"
+        \alt "?" <expr>
+        \alt "if" <expr> "then" <expr> "else" <expr>
+        \alt <expr> "fby" <expr>
+        \alt <expr> "where" "{" <wheredecls> "}"
+        \alt "next" <expr>
+        \alt <var> "(" <exprlist> ")"
+        \alt <expr> "+" <expr>
+        \alt <expr> "-" <expr>
+        \alt <expr> "*" <expr>
+        \alt <expr> "/" <expr>
+        \alt <exprtuple>
+        
+        <exprtuple> ::= "(" <exprlist> ( "|" <expr> )? ")"
+        
+        <bool> ::= "true" | "false"
+        
+        <exprlist> ::= <expr> "," <exprlist> | <expr>
+        
+        <varlist> ::= <var> "," <varlist> | <var>
+        
+        <wheredecl> ::= <var> "=" <expr> 
+        \alt <var> "(" <varlist> ")" "=" <expr>
+        \alt "(" <varlist> ( "|" <var> )? ")" "=" <expr>
+        
+        <wheredecls> ::= <wheredecl> ";" <wheredecls> | <wheredecl>
+    \end{grammar}
+
+    In principle, any Pixy expression with no free variables can be viewed as a self-container program. Our current implementation reads a series of wheredecls and executes a main operator for the sake of ease of use.
+    
+    We support 3 common datatypes: booleans, natural numbers and tuples.
+    
+    \subsection{Operational semantics}
+    
+    Pixy's operational semantics have several stages in order to model the ahead-of-time requirements of the language. This helps to prove by construction that Pixy's key properties hold.
+    
+    The first stage is used to flatten out any operator calls. Since recursive operator calls could lead to unbounded memory usage during evaluation, Pixy requires all operator calls including recursive ones to be flattened out before evaluation. In order to predict the maximum possible recursion depth and allocate memory for it ahead of time, we use a technique based on sized types.
+    
+    The second stage is the allocation of initial state for all builtin operators - this was split off from the first stage due to complexity concerns.
+    
+    The last stage is the evaluation derivations themselves, which operate on the modified AST and initial state defined in the prior stages. This stage models the lifecycle of the program and repeats indefinitely.
+    
+    \subsubsection{Operator calls}
+    
+    To begin with, we flatten out all operator calls via substitution. This is both to ensure that there is a clear bound on the time a Pixy expression can take to perform one time step and to simplify the formulation of any further stages.
+    
+    We have an idea of how to deal with recursive operator application, but it is incomplete. Similar to [], we expect to reason about recursion depth using sized types. Specifically, we hope to generate upper and lower bounds for all operator arguments and enforce that the range of possible inputs to a recursive operator strictly decreases as recursion depth increases. Thus, we should be able to either generate a series of substitutions equivalent to the deepest recursion depth possible or reject an expression as ill-formed.
+    
+    Our problem at the moment is that we do not have a precise enough representation of numbers in Pixy. While it is simple enough to calculate upper and lower bounds for an expression given its type, performing operations on these bounds requires a precise definition of numerical edge cases that we lack. We leave to future work excatly how to do this, but expect that once a more precise set of numerical semantics are derived the issue will be simpler.
+    
+    For the simple case where we assume no recursion occurs, operator call flattening can be expressed using the syntax $\Gamma \vdash E \flattenrel E'$ where $\Gamma$ represents the current scope, $E$ represents the initial expression and $E'$ represents the modified result with no operator calls.
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma \vdash B \flattenrel_{W1} B'; \Gamma' \\
+        \Gamma, \Gamma' \vdash B' \flattenrel_{W2} B'' \\
+        \Gamma, \Gamma' \vdash E \flattenrel E'
+        \end{matrix}
+    }{
+        \Gamma \vdash E \where \{ B \} \flattenrel E' \where B''
+    }[\text{Flatten-where}]
+    \end{align*}
+    
+    Since order inside a where clause is arbitrary, we have to be careful how we treat scoping. First we pass through and collect all the operator definitions, then we perform a second pass while applying the operators wherever necessary.
+    
+    \begin{align*}
+    \frac{
+        \Gamma \vdash R \flattenrel_{W1} R'; \Gamma'
+    }{
+        \Gamma \vdash F(A...) = E; R \flattenrel_{W1} R'; F(A...) = E, \Gamma'
+    }[\text{Flatten-where-1-operator}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \Gamma \vdash R \flattenrel_{W1} R'; \Gamma'
+    }{
+        \Gamma \vdash V = E; R \flattenrel_{W1} (V = E; R'); \Gamma'
+    }[\text{Flatten-where-1-variable}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \Gamma \vdash \flattenrel_{W1} ; \emptyset
+    }[\text{Flatten-where-1-empty}]
+    \end{align*}
+    
+    Once we've collected all the operator definitions, we traverse all the subexpressions and substitute them in when necessary:
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma \vdash E \flattenrel E' \\
+        \Gamma \vdash R \flattenrel_{W2} R'
+        \end{matrix}
+    }{
+        \Gamma \vdash V = E; R \flattenrel_{W2} V = E'; R'
+    }[\text{Flatten-where-2-variable}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \Gamma \vdash \flattenrel_{W2}
+    }[\text{Flatten-where-2-empty}]
+    \end{align*}
+    
+    When we encounter an operator application, we replace it the operator's body and a scope modifier to avoid name conflicts:
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma(F(A...) = E) \\
+        \Gamma \vdash E \flattenrel E'
+        \end{matrix}
+    }{
+        \Gamma \vdash F(V...) \flattenrel [A=V...]E'
+    }[\text{Flatten-apply}]
+    \end{align*}
+    
+    Note: the scope modifier pictured here is not a substitution - it will be interpreted specially by later stages.
+    
+    \subsubsection{init stage}
+    
+    Pixy has an initialisation stage during which all the state needed for any later computation will be initialised and buffers are put in place to implement delay compensation - this is the only stage that controls the allocation of memory.
+    
+    To give a brief rationale for delay compensation, consider the following Pixy snippet:
+    
+    \begin{lstlisting}
+x = 1;
+y = x + next x;
+    \end{lstlisting}
+    
+    Following the basic semantics, at $t_1$ $x$ will be 1, and when computing $y$ we will take 1 and try to add it to $\nextop x$, which dropped the value $1$ and is equal to $nil$ in this case. This is counter-intuitive since $x + \nextop x$ looks like it means "wait for $\nextop x$" then add $x$ to it. When considering this issue we found that it was possible to reimplement the intuitive interpretation using implicit buffering, or delay compensation.
+    
+    The syntax for derivations of this stage looks like this:
+    
+    \begin{align*}
+    d \vdash E \initrel S; \delta; \Delta
+    \end{align*}
+    
+    $d$ is the number of nested fby expressions containing $E$ (initially 0)
+    
+    $S$ is the starting state for expression $E$
+    
+    $\delta$ is the pre-delay of expression $E$, that is, the number of timesteps before $E$ will yield values.
+    
+    $\Delta$ is the set of constraints on pre-delay time. These are to be solved by a constraint solver in order to derive the appropriate pre-delays of any expression.
+    
+    In order to perform delay compensation, some initial state will use a notation $Q[x]$ as a shorthand for creating a queue of length $x$. This queue will initially be empty, and should be filled at maximum to capacity $x$.
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        d \vdash A \initrel S_a; \delta_a; \Delta_a \\
+        d \vdash B \initrel S_b; \delta_b; \Delta_b \\
+        \end{matrix}
+    }{
+        d \vdash A \; op \; B \initrel (S_a, Q[\max(\delta_a, \delta_b) - \delta_a], S_b, Q[\max(\delta_a, \delta_b) - \delta_b]); \max(\delta_a, \delta_b); \Delta_a, \Delta_b
+    }[\text{Init-binop}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        d \vdash E \initrel S; \delta; \Delta
+        \end{matrix}
+    }{
+        d \vdash \nextop E \initrel (false, S); \delta+1; \Delta
+    }[\text{Init-next}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        d \vdash A \initrel S_a; \delta_a; \Delta_a \\
+        d+1 \vdash B \initrel S_b; \delta_b; \Delta_b \\
+        \end{matrix}
+    }{
+        d \vdash A \fby B \initrel (false, nil, S_a, S_b); \delta_a; \Delta_a, \Delta_b, \delta_a \geq \delta_b - d
+    }[\text{Init-fby}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        d \vdash I \initrel (); \delta(I);
+    }[\text{Init-id}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \overline{d \vdash V \initrel S_v; \delta_v; \Delta_v}^{V...} \\
+        d \vdash E \initrel S; \delta; \Delta
+        \end{matrix}
+    }{
+        d \vdash [A=V...]E \initrel (S, (S_v...), (Q[\max(\delta_v...) - \delta_v]...)); \delta; \Delta, \Delta_v..., \delta(A)=\delta_v...
+    }[\text{Init-operator-scope}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \overline{d \vdash V \initrel S_v; \delta_v; \Delta_v}^{V...} \\
+        d \vdash E \initrel S; \delta; \Delta
+        \end{matrix}
+    }{
+        d \vdash E \where \{ N=V... \} \initrel (S, (nil...), (S_v...)); \delta; \Delta, \Delta_v..., \delta(N)=\delta_v...
+    }[\text{Init-where}]
+    \end{align*}
+    
+    \subsubsection{Proof of $\delta$ correctness}
+    
+    TODO
+    
+    \subsubsection{Runtime evaluation semantics}
+    
+    Now that we have described how to prepare a Pixy program to be run, here are the semantics of a running Pixy program.
+    
+    Since a Pixy program's evaluation takes place over an infinite series of timesteps, the evaluation semantics describe a single timestep in detail.
+    
+    The syntax of one evaluation step looks like this: $\Gamma; S \vdash E \Downarrow V; S'$.
+    
+    \paragraph{Conditionals}
+    
+    We haven't considered if statements in great detail so far - they pose a peculiar problem. Unlike typical programming languages, if statements in Pixy do not short-circuit. That is, we must ensure that concurrent events continue uninterrupted in both the taken and non-taken branches of the if statement.
+    
+    To achieve this we introduce a second mode of evaluation, choke-evaluation. It is notated $\ceval$ and aside from its special implementation acts the same as normal evaluation. Specifically, if an expression if choke-evaluated then it should not appear to perform any computations. It may however update any of its non-visible state as normal.
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_c \vdash C \Downarrow true; S_c' \\
+        \Gamma; S_t \vdash T \Downarrow V; S_t' \\
+        \Gamma; S_f \vdash F \ceval nil; S_f'
+        \end{matrix}
+    }{
+        \Gamma; (S_c, S_t, S_f) \vdash \ifop C \thenop T \elseop F \Downarrow V; (S_c', S_t', S_f')
+    }[\text{Eval-if-true}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_c \vdash C \Downarrow false; S_c' \\
+        \Gamma; S_t \vdash T \ceval nil; S_t' \\
+        \Gamma; S_f \vdash F \Downarrow V; S_f'
+        \end{matrix}
+    }{
+        \Gamma; (S_c, S_t, S_f) \vdash \ifop C \thenop T \elseop F \Downarrow V; (S_c', S_t', S_f')
+    }[\text{Eval-if-false}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_c \vdash C \Downarrow false; S_c' \\
+        \Gamma; S_t \vdash T \ceval nil; S_t' \\
+        \Gamma; S_f \vdash F \ceval nil; S_f'
+        \end{matrix}
+    }{
+        \Gamma; (S_c, S_t, S_f) \vdash \ifop C \thenop T \elseop F \Downarrow nil; (S_c', S_t', S_f')
+    }[\text{Eval-if-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_c \vdash C \ceval nil; S_c' \\
+        \Gamma; S_t \vdash T \ceval nil; S_t' \\
+        \Gamma; S_f \vdash F \ceval nil; S_f'
+        \end{matrix}
+    }{
+        \Gamma; (S_c, S_t, S_f) \vdash \ifop C \thenop T \elseop F \ceval nil; (S_c', S_t', S_f')
+    }[\text{Eval-if-C}]
+    \end{align*}
+    
+    \paragraph{Binop}
+    
+    This is a catch-all derivation for any binary operator in Pixy - the main point of interest here is that binary operators synchronise their inputs using buffers allocated in the init stage.
+    
+    $\buffer(Q, V)$ in this case is a shorthand for pushing $V$ onto the queue $Q$, returning the element at the front of the queue is any, $nil$ otherwise.
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_l \vdash L \Downarrow V_l; S_l' \\
+        \Gamma; S_r \vdash R \Downarrow V_r; S_r' \\
+        \buffer(Q_l, V_l) = Q_l', D_l \\
+        \buffer(Q_r, V_r) = Q_r', D_r
+        \end{matrix}
+    }{
+        \Gamma; (S_l, Q_l, S_r, Q_r) \vdash L \; op \; R \Downarrow D_l \; op \; D_r; (S_l', Q_l', S_r', Q_r')
+    }[\text{Eval-binop}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_l \vdash L \ceval nil; S_l' \\
+        \Gamma; S_r \vdash R \ceval nil; S_r' \\
+        \buffer(Q_l, nil) = Q_l', D_l \\
+        \buffer(Q_r, nil) = Q_r', D_r
+        \end{matrix}
+    }{
+        \Gamma; (S_l, Q_l, S_r, Q_r) \vdash L \; op \; R \ceval D_l \; op \; D_r; (S_l', Q_l', S_r', Q_r')
+    }[\text{Eval-binop-C}]
+    \end{align*}
+    
+    \paragraph{Where}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \overline{\Gamma, \overline{N=S_v...}^{S_v...}; S_s \vdash E_v \Downarrow V_v; S_s'}^{E_v...} \\
+        \Gamma, N=V_v...; S \vdash E \Downarrow V; S' \\
+        \end{matrix}
+    }{
+        \Gamma; (S, (S_v...), (S_s...)) \vdash E \where \{ N=E_v... \} \Downarrow V; (S', V_v..., S_s'...)
+    }[\text{Eval-where}]
+    \end{align*}
+    
+    An interesting observation here is that even under choke-evaluation where expression still evaluate their internal state. This is because the where's internal state is not directly visible - hidden computation can occur as long as it is not returned from the main body of the where.
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \overline{\Gamma, \overline{N=S_v...}^{S_v...}; S_s \vdash E_v \Downarrow V_v; S_s'}^{E_v...} \\
+        \Gamma, N=V_v...; S \vdash E \ceval nil; S' \\
+        \end{matrix}
+    }{
+        \Gamma; (S, (S_v...), (S_s...)) \vdash E \where \{ N=E_v... \} \ceval nil; (S', V_v..., S_s'...)
+    }[\text{Eval-where-C}]
+    \end{align*}
+    
+    \paragraph{Operator scope}
+    
+    Even though operator application will have been flattened in stage 1, we still need to apply the proper scoping rules and synchronisation here.
+    
+    Specifically, we ensure all the arguments have their pre-delays synchronised and that the variable scope contains only the arguments to the operator.
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \overline{\Gamma; S_v \vdash E_v \Downarrow V_v; S_v'}^{E_v...} \\
+        \overline{\buffer(Q_v, V_v) = Q_v', D_v}^{Q_v...} \\
+        A = D_v...; S \vdash E \Downarrow V; S'
+        \end{matrix}
+    }{
+        \Gamma; (S, (S_v...), (Q_v...)) \vdash [A=E_v...]E \Downarrow V; (S', (S_v'...), (Q_v'...))
+    }[\text{Eval-apply}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \overline{\Gamma; S_v \vdash E_v \ceval nil; S_v'}^{E_v...} \\
+        \overline{\buffer(Q_v, nil) = Q_v', D_v}^{Q_v...} \\
+        A = D_v...; S \vdash E \ceval nil; S'
+        \end{matrix}
+    }{
+        \Gamma; (S, (S_v...), (Q_v...)) \vdash [A=E_v...]E \ceval nil; (S', (S_v'...), (Q_v'...))
+    }[\text{Eval-apply-C}]
+    \end{align*}
+    
+    \paragraph{fby}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_a \vdash A \Downarrow V_a; S_a' \\
+        \Gamma; S_b \vdash B \Downarrow V_b; S_b' \\
+        V_b \neq nil
+        \end{matrix}
+    }{
+        \Gamma; (false, U, S_a, S_b) \vdash A \fby B \Downarrow V_a; (V_a \neq nil, V_b, S_a', S_b')
+    }[\text{Eval-fby-A-buffer}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_a \vdash A \Downarrow V_a; S_a' \\
+        \Gamma; S_b \vdash B \Downarrow V_b; S_b' \\
+        V_b = nil
+        \end{matrix}
+    }{
+        \Gamma; (false, U, S_a, S_b) \vdash A \fby B \Downarrow V_a; (V_a \neq nil, U, S_a', S_b')
+    }[\text{Eval-fby-A-nobuffer}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_a \vdash A \ceval nil; S_a' \\
+        \Gamma; S_b \vdash B \Downarrow V_b; S_b' \\
+        U \neq nil
+        \end{matrix}
+    }{
+        \Gamma; (true, U, S_a, S_b) \vdash A \fby B \Downarrow U; (true, V_b, S_a', S_b')
+    }[\text{Eval-fby-B-buffer}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_a \vdash A \ceval nil; S_a' \\
+        \Gamma; S_b \vdash B \Downarrow V_b; S_b' \\
+        U = nil
+        \end{matrix}
+    }{
+        \Gamma; (true, U, S_a, S_b) \vdash A \fby B \Downarrow V_b; (true, nil, S_a', S_b')
+    }[\text{Eval-fby-B-nobuffer}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_a \vdash A \ceval nil; S_a' \\
+        \Gamma; S_b \vdash B \ceval nil; S_b'
+        \end{matrix}
+    }{
+        \Gamma; (C, U, S_a, S_b) \vdash A \fby B \ceval nil; (C, U, S_a', S_b')
+    }[\text{Eval-fby-C}]
+    \end{align*}
+    
+    \paragraph{next}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S \vdash E \Downarrow V; S' \\
+        V = nil
+        \end{matrix}
+    }{
+        \Gamma; (false, S) \vdash \nextop E \Downarrow nil; (false, S')
+    }[\text{Eval-next-skip-nil}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S \vdash E \Downarrow V; S' \\
+        V \neq nil
+        \end{matrix}
+    }{
+        \Gamma; (false, S) \vdash \nextop E \Downarrow nil; (true, S')
+    }[\text{Eval-next-skip-first}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S \vdash E \Downarrow V; S' \\
+        \end{matrix}
+    }{
+        \Gamma; (true, S) \vdash \nextop E \Downarrow V; (true, S')
+    }[\text{Eval-next-forward}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S \vdash E \ceval nil; S' \\
+        \end{matrix}
+    }{
+        \Gamma; (C, S) \vdash \nextop E \ceval nil; (C, S')
+    }[\text{Eval-next-C}]
+    \end{align*}
+    
+    \paragraph{Id}
+    
+    \begin{align*}
+    \frac{
+        \Gamma(I) = V
+    }{
+        \Gamma, () \vdash I \Downarrow V; ()
+    }[\text{Eval-id}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{}{
+        \Gamma, () \vdash I \ceval nil; ()
+    }[\text{Eval-id-C}]
+    \end{align*}
+    
+    \section{Comments and future work}
+    
+    There is clearly a lot more to be done to the language. At the evaluation level we need to properly refine recursive operator application, and most of our ideas for a type system are discussed but not fully explored. While we have described some of these ideas inline, here we will present a set of possible future directions and our thoughts on them.
+    
+    \subsection{Circuits and lowest common denominator of computation}
+    
+    As we worked more on the language, we discovered that Pixy is not very powerful compared to most languages. In its current form it isn't even Turing complete.
+    
+    While on its own this can be seen as a weakness in the language, we noticed at the same time that due to its fully static control flow Pixy can be used to describe algorithms that would work on more unusual platforms such as field programmable gate arrays - since it derives from Lucid, which had both a text and a diagram representation, and removes most of Lucid's dynamicism, Pixy should be able to express algorithms targeted at the lowest common denominator of computation: digital circuits. Since we also envisage interesting implementation strategies for commodity hardware, once we build a better base for the language it may be interesting to investigate what happens if you apply Pixy to circuit design.
+    
+    \subsection{State of the type system(s)}
+    
+    Current discussion places Pixy type system as 2-dimensional along the data and control axes. On the one hand we envisage a traditional type system similar to that used in typical functional programming languages that would be used to make sure basic data is coherent across all program timesteps, and on the other we hope to experiment with a temporal logic-based system that tries to reason about tricky corner cases and synchronisation problems that span multiple timesteps.
+    
+    Part of our work on synchronising pre-delays might be generalisable to become a part of the temporal type system, and can already catch some basic programming errors.
+    
+    \subsection{Expressing iteration}
+    
+    One notable missing feature from Lucid is support for nested iteration. Here we explore why this feature disappeared and how we expect to replace it.
+    
+    In Lucid one would have been able to write something like this:
+    
+    \begin{lstlisting}
+c until c eq N where
+    N is current n;
+    c = 1 fby c+1;
+end
+    \end{lstlisting}
+    
+    Given some external variable $n$, for each value of $n$ this would yield the sequence $1 \dots n-1$. While this is a reasonable program to write, within the context of Pixy's state machine-based semantics one might ask the question: if used within another program, when will these values be yielded? For this program, the question does not have an answer. Since for every timestep a new value of $n$ may be presented, there can exist no state machine that will yield more than one value in a single timestep.
+    
+    While this can be seen as a limitation of Pixy relative to Lucid's expressiveness, this also demonstrates that Pixy's state machine model enforces that each timestep of a Pixy program will take a known amount of time - it is impossible to write a program whose timesteps take an unbounded amount of time to execute.
+    
+    The closest alternative we imagine is Turing-incomplete synchronous recursion, also referred to as recursive operator application earlier in this document. This would allow processing batches of data in one timestep, but using a mechanism more similar to C++'s templates. All calls would be expanded at compile time and the maximum recursion depth would be checked in order to ensure that a deadline can be given and met for the completion of each program timestep.
+    
+    For truly infinite computation, the programmer would have to express it over multiple timesteps. This is reasonable, since Pixy specifically prioritises liveness and concurrency over expressiveness. It also encourages developers to think about the liveness of their systems - can the system afford to wait? What other components might be affected?
+    
+\end{document}
