@@ -222,6 +222,20 @@ y = x + next x;
     \begin{align*}
     \frac{
         \begin{matrix}
+        d \vdash C \initrel S_C; \delta_C; \Delta_C \\
+        d \vdash T \initrel S_T; \delta_T; \Delta_T \\
+        d \vdash F \initrel S_F; \delta_F; \Delta_F
+        \end{matrix}
+    }{
+        d \vdash \ifop C \thenop T \elseop F \initrel (S_C, Q[m-\delta_C], S_T, Q[m-\delta_T], S_F, Q[m-\delta_F]); m; \Delta_C, \Delta_T, \Delta_F
+    }[\text{Init-if}]
+    \end{align*}
+    
+    where $m = \max(\delta_C, \delta_T, \delta_F)$
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
         d \vdash E \initrel S; \delta; \Delta
         \end{matrix}
     }{
@@ -299,36 +313,45 @@ y = x + next x;
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma; S_c \vdash C \Downarrow true; S_c' \\
+        \Gamma; S_c \vdash C \Downarrow V_c; S_c' \\
         \Gamma; S_t \vdash T \Downarrow V; S_t' \\
-        \Gamma; S_f \vdash F \ceval nil; S_f'
+        \Gamma; S_f \vdash F \ceval nil; S_f' \\
+        \buffer(Q_c, V_c) = Q_c', true \\
+        \buffer(Q_t, V) = Q_t', D \\
+        \buffer(Q_f, nil) = Q_f', nil 
         \end{matrix}
     }{
-        \Gamma; (S_c, S_t, S_f) \vdash \ifop C \thenop T \elseop F \Downarrow V; (S_c', S_t', S_f')
+        \Gamma; (S_c, Q_c, S_t, Q_t, S_f, Q_f) \vdash \ifop C \thenop T \elseop F \Downarrow D; (S_c', Q_c', S_t', Q_t', S_f', Q_f')
     }[\text{Eval-if-true}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma; S_c \vdash C \Downarrow false; S_c' \\
+        \Gamma; S_c \vdash C \Downarrow V_c; S_c' \\
         \Gamma; S_t \vdash T \ceval nil; S_t' \\
-        \Gamma; S_f \vdash F \Downarrow V; S_f'
+        \Gamma; S_f \vdash F \Downarrow V; S_f' \\
+        \buffer(Q_c, V_c) = Q_c', false \\
+        \buffer(Q_t, nil) = Q_t', nil \\
+        \buffer(Q_f, V) = Q_f', D
         \end{matrix}
     }{
-        \Gamma; (S_c, S_t, S_f) \vdash \ifop C \thenop T \elseop F \Downarrow V; (S_c', S_t', S_f')
+        \Gamma; (S_c, Q_c, S_t, Q_t, S_f, Q_f) \vdash \ifop C \thenop T \elseop F \Downarrow D; (S_c', Q_c', S_t', Q_t', S_f', Q_f')
     }[\text{Eval-if-false}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma; S_c \vdash C \Downarrow false; S_c' \\
+        \Gamma; S_c \vdash C \Downarrow V_c; S_c' \\
         \Gamma; S_t \vdash T \ceval nil; S_t' \\
-        \Gamma; S_f \vdash F \ceval nil; S_f'
+        \Gamma; S_f \vdash F \ceval nil; S_f' \\
+        \buffer(Q_c, V_c) = Q_c', nil \\
+        \buffer(Q_t, nil) = Q_t', nil \\
+        \buffer(Q_f, nil) = Q_f', nil
         \end{matrix}
     }{
-        \Gamma; (S_c, S_t, S_f) \vdash \ifop C \thenop T \elseop F \Downarrow nil; (S_c', S_t', S_f')
+        \Gamma; (S_c, Q_c, S_t, Q_t, S_f, Q_f) \vdash \ifop C \thenop T \elseop F \Downarrow nil; (S_c', Q_c', S_t', Q_t', S_f', Q_f')
     }[\text{Eval-if-nil}]
     \end{align*}
     
@@ -337,10 +360,13 @@ y = x + next x;
         \begin{matrix}
         \Gamma; S_c \vdash C \ceval nil; S_c' \\
         \Gamma; S_t \vdash T \ceval nil; S_t' \\
-        \Gamma; S_f \vdash F \ceval nil; S_f'
+        \Gamma; S_f \vdash F \ceval nil; S_f' \\
+        \buffer(Q_c, nil) = Q_c', nil \\
+        \buffer(Q_t, nil) = Q_t', nil \\
+        \buffer(Q_f, nil) = Q_f', nil
         \end{matrix}
     }{
-        \Gamma; (S_c, S_t, S_f) \vdash \ifop C \thenop T \elseop F \ceval nil; (S_c', S_t', S_f')
+        \Gamma; (S_c, Q_c, S_t, Q_t, S_f, Q_f) \vdash \ifop C \thenop T \elseop F \ceval nil; (S_c', Q_c', S_t', Q_t', S_f', Q_f')
     }[\text{Eval-if-C}]
     \end{align*}
     
@@ -355,8 +381,23 @@ y = x + next x;
         \begin{matrix}
         \Gamma; S_l \vdash L \Downarrow V_l; S_l' \\
         \Gamma; S_r \vdash R \Downarrow V_r; S_r' \\
+        \buffer(Q_l, V_l) = Q_l', nil \\
+        \buffer(Q_r, V_r) = Q_r', nil
+        \end{matrix}
+    }{
+        \Gamma; (S_l, Q_l, S_r, Q_r) \vdash L \; op \; R \Downarrow nil; (S_l', Q_l', S_r', Q_r')
+    }[\text{Eval-binop-skip}]
+    \end{align*}
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \Gamma; S_l \vdash L \Downarrow V_l; S_l' \\
+        \Gamma; S_r \vdash R \Downarrow V_r; S_r' \\
         \buffer(Q_l, V_l) = Q_l', D_l \\
-        \buffer(Q_r, V_r) = Q_r', D_r
+        \buffer(Q_r, V_r) = Q_r', D_r \\
+        D_l \neq nil \\
+        D_r \neq nil
         \end{matrix}
     }{
         \Gamma; (S_l, Q_l, S_r, Q_r) \vdash L \; op \; R \Downarrow D_l \; op \; D_r; (S_l', Q_l', S_r', Q_r')
@@ -368,11 +409,11 @@ y = x + next x;
         \begin{matrix}
         \Gamma; S_l \vdash L \ceval nil; S_l' \\
         \Gamma; S_r \vdash R \ceval nil; S_r' \\
-        \buffer(Q_l, nil) = Q_l', D_l \\
-        \buffer(Q_r, nil) = Q_r', D_r
+        \buffer(Q_l, nil) = Q_l', nil \\
+        \buffer(Q_r, nil) = Q_r', nil
         \end{matrix}
     }{
-        \Gamma; (S_l, Q_l, S_r, Q_r) \vdash L \; op \; R \ceval D_l \; op \; D_r; (S_l', Q_l', S_r', Q_r')
+        \Gamma; (S_l, Q_l, S_r, Q_r) \vdash L \; op \; R \ceval nil; (S_l', Q_l', S_r', Q_r')
     }[\text{Eval-binop-C}]
     \end{align*}
     
