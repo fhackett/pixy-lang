@@ -280,6 +280,16 @@ y = x + next x;
     
     The syntax of one evaluation step looks like this: $\Gamma; S \vdash E \Downarrow V; S'$.
     
+    $\Gamma$ represents a mapping of variable names to value, that is, the current scope.
+    
+    $S$ represents the accumulated state associated with the current expression.
+    
+    $E$ represents the current expression.
+    
+    $V$ is the value that $E$ evaluates to in the context of $\Gamma$ and $S$ at the current timestep.
+    
+    $S'$ is the state that will be used to evaluate $E$ in the next timestep.
+    
     \paragraph{Conditionals}
     
     We haven't considered if statements in great detail so far - they pose a peculiar problem. Unlike typical programming languages, if statements in Pixy do not short-circuit. That is, we must ensure that concurrent events continue uninterrupted in both the taken and non-taken branches of the if statement.
