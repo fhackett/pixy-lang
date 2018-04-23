@@ -15,7 +15,7 @@ import Data.Semigroup
 import Pixy.Syntax
 import qualified Data.Map.Strict as Map
 import Data.List (find)
-import Data.Map (Map)
+import Data.Map.Strict (Map)
 import System.Exit
 --DEBUGGING
 import Debug.Trace
@@ -50,7 +50,6 @@ init = \case
     (Var x) -> return $ VarS x
     (Const k) -> return $ ConstS k
     (If c t f) -> IfS <$> init c <*> init t <*> init f
-    (Check e) -> CheckS <$> init e
     (Fby l r) -> FbyS False <$> init l <*> init r
     (Next e) -> NextS <$> censor (+1) (init e)
     (Where body bs) -> do
@@ -85,7 +84,7 @@ runInit fs = case genConstraints fs of
         in fst $ evalRWS (init body) fs cs
 
 withBindings :: (MonadReader (Map Var [Value]) m) => Map Var VarInfo -> m a -> m a
-withBindings bs = local (Map.union (fmap varBuffer bs))
+withBindings !bs = local (Map.union (fmap varBuffer bs))
 -- withBindings bs = local (Map.union (Map.mapWithKey (\v vi -> let vb = varBuffer vi in trace (show v ++ ":" ++ show vb) vb) bs))
 
 eval :: (MonadReader (Map Var [Value]) m) => ExprS -> m (ExprS, Value)
@@ -104,11 +103,6 @@ eval = \case
                     (f', fVal) <- eval f
                     return (IfS c' t' f', fVal)
                 v -> error "Boolean Expected!"
-        (CheckS e) -> do
-            (e', eVal) <- eval e
-            case eVal of
-                VNil -> return (CheckS e', VBool False)
-                _ -> return (CheckS e', VBool True)
         (FbyS latch l r) -> 
             if latch then do
                 l' <- chokeEval l
@@ -175,6 +169,7 @@ eval = \case
                 -- (Equals, VInt i, VInt j) -> VBool (i == j)
                 -- (_, VNil, VNil) -> il
         evalUnary Not (VBool b) = VBool (not b)
+        evalUnary Check v = VBool (v /= VNil)
         evalUnary Trace v = trace ("Trace:" ++ show v) v
         evalUnary op e = error $ "Operand Mismatch: " ++ show op ++ " " ++ show e
 
@@ -195,7 +190,6 @@ chokeEval = \case
     (VarS x) -> return $ VarS x
     (ConstS k) -> return $ ConstS k
     (IfS c t f) -> IfS <$> chokeEval c <*> chokeEval t <*> chokeEval f
-    (CheckS e) -> CheckS <$> chokeEval e
     (FbyS latch l r) -> FbyS latch <$> chokeEval l <*> chokeEval r
     (NextS e) -> NextS <$> chokeEval e
     (WhereS body bs) -> WhereS <$> chokeEval body <*> withBindings bs (Map.traverseWithKey evalBinding bs)

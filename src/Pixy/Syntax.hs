@@ -31,6 +31,7 @@ data Binop
 
 data Unary
     = Not
+    | Check
     | Trace
     deriving (Show)
 
@@ -38,13 +39,12 @@ data Value
     = VInt !Int
     | VBool !Bool
     | VNil
-    deriving (Show)
+    deriving (Show, Eq)
 
 data Expr
     = Var Var
     | Const Value
     | If Expr Expr Expr
-    | Check Expr
     | Fby Expr Expr
     | Next Expr
     | Where Expr [(Var, Expr)]
@@ -58,7 +58,6 @@ data ExprS
     = VarS Var
     | ConstS Value
     | IfS ExprS ExprS ExprS
-    | CheckS ExprS
     | FbyS Bool ExprS ExprS
     | NextS ExprS
     | WhereS ExprS (Map Var VarInfo)

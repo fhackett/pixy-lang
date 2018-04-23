@@ -44,7 +44,7 @@ operators =
     , [ binary "+" (Binop Plus)
       , binary "-" (Binop Minus) ]
     , [ binary "%" (Binop Modulo) ]
-    , [ prefix "?" Check ]
+    , [ prefix "?" (Unary Check) ]
     , [ binary "==" (Binop Equals) 
     ,   binary "!=" (Binop NotEquals) 
     ,   binary "<=" (Binop LessThanEquals) 
