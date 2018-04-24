@@ -119,9 +119,13 @@ constraints = \case
         whereBody bs = local (\s -> s { whereVars = fst <$> bs })
 
         fConstraints :: Function -> [(FDExpr s)] -> Delay s (FDExpr s)
-        fConstraints (Function n argnames body) args = 
+        fConstraints (Function n argnames body) args = do
+            retDelay <- lift $ lift $ new (Domain.range 0 Domain.sup)
+            tell [retDelay]
             let vargs = Map.fromList $ zip argnames args
-            in local (\s -> s { varDelays = Map.union vargs (varDelays s), whereVars = argnames}) (constraints body)
+            bodyDelay <- local (\s -> s { varDelays = vargs, whereVars = argnames}) (constraints body)
+            lift $ lift $ retDelay #== bodyDelay
+            return bodyDelay
 
 genConstraints :: [Function] -> Expr -> Maybe [Int]
 genConstraints fs e = tryHead $ runFD $ do

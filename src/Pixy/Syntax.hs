@@ -56,15 +56,14 @@ data Expr
 
 -- AST decorated with the state needed for execution
 data ExprS
-    = VarS Var
-    | ConstS Value
-    | IfS ExprS ExprS ExprS
-    | FbyS Bool ExprS ExprS
-    | NextS ExprS
-    | WhereS ExprS (Map Var VarInfo)
-    | AppS ExprS (Map Var ExprS)
-    | BinopS Binop ExprS ExprS
-    | UnaryS Unary ExprS
+    = VarS !Var !Int
+    | ConstS !Value
+    | IfS !ExprS !ExprS !ExprS
+    | FbyS !Bool !ExprS !ExprS
+    | WhereS !ExprS !(Map Var VarInfo)
+    | AppS !ExprS !(Map Var VarInfo)
+    | BinopS !Binop !ExprS !ExprS
+    | UnaryS !Unary !ExprS
     deriving (Show)
 
 data VarInfo = VarInfo 
@@ -73,4 +72,7 @@ data VarInfo = VarInfo
     , varBuffer :: Seq Value
     }
     deriving (Show)
+
+
+
 
