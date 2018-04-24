@@ -1,4 +1,6 @@
+foo(y) = next y
+
 main() = y where {
     x = 1 fby (x + 1)
-    y = (next x) + x
+    y = foo(x)
 }

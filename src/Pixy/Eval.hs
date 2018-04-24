@@ -70,13 +70,12 @@ init = \case
     (Next e) -> NextS <$> nextDepth (init e)
     (Where body bs) -> do
         bs' <- initWhereVars bs
-        body' <- (init body)
+        body' <- trace ("BufferSizes:" ++ show bs') (init body)
         return $ WhereS body' bs'
     (App fname args) -> do
         f <- find (\(Function n _ _) -> n == fname) <$> asks functions
-        args' <- init `mapM` args
         case f of
-            Just (Function _ argNames e) -> AppS <$> init e <*> pure (Map.fromList $ zip argNames args')
+            Just f -> initApp f args
             Nothing -> error $ "init: Undefined Function " ++ fname
     (Binop op l r) -> BinopS op <$> init l <*> init r
     (Unary op e) -> UnaryS op <$> init e
@@ -96,8 +95,28 @@ init = \case
             modify (\s -> s { bufferSizes = Map.union (Map.withoutKeys sizes definedSet ) outerSizes })
             return $ Map.merge Map.preserveMissing Map.dropMissing (Map.zipWithMatched (\_ vi n -> vi { varBuffer = Seq.replicate (max n (length $ varBuffer vi)) VNil })) bs' sizes
 
+        initApp :: (MonadReader InitReaderState m, MonadState InitState m) => Function -> [Expr] -> m ExprS
+        initApp (Function _ argNames e) args = do
+            outerSizes <- gets bufferSizes
+            modify (\s -> s { bufferSizes = Map.empty })
+            e' <- init e
+            sizes <- Map.filterWithKey (\k _ -> k `elem` argNames) <$> gets bufferSizes
+            let argLevels = fmap (lookupLevel sizes) argNames
+            modify (\s -> s { bufferSizes = outerSizes })
+            args' <- mapM (\(l, a) -> incDepth l $ init a) $ zip argLevels args
+            -- I need to get the set of keys that were arguments, and then add that next level to each one of the args when init
+            return $ AppS e' (Map.fromList $ zip argNames args')
+            where
+                lookupLevel :: Map Var Int -> Var -> Int
+                lookupLevel vm x = case Map.lookup x vm of
+                    Just l -> l - 1
+                    Nothing -> 0
+
+        incDepth :: (MonadReader InitReaderState m) => Int -> m a -> m a
+        incDepth k = local (\s -> s { depth = (depth s) + k})
+
         nextDepth :: (MonadReader InitReaderState m) => m a -> m a
-        nextDepth = local (\s -> s { depth = (depth s) + 1})
+        nextDepth = incDepth 1
 
         recordDepth :: (MonadReader InitReaderState m, MonadState InitState m) => Var -> m ()
         recordDepth x = do
