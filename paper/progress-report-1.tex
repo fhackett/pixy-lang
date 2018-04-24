@@ -40,7 +40,13 @@
     
     \section{Introduction}
     
+    //TODO what are the desired properties?
+    
+    // coinductive properties? what is correctness?
+    
     Our initial goal was to adapt the Lucid programming language to have first-class support for realtime programming, while retaining its nature as a general purpose language.
+    
+    Specifically, we were looking for a language with asynchronous semantics such that no one part of a program necessarily has to block the other. Then, we are looking for ways to ensure that programs expressed written in Pixy progress coinductively over time.
     
     Our progress so far is that we have redesigned the language's evaluation semantics from the ground up to create Pixy, a language that shares a lot of syntax and surface-level semantics with Lucid. Pixy is however at its core a very different language.
     
@@ -79,19 +85,21 @@
         <varlist> ::= <var> "," <varlist> | <var>
         
         <wheredecl> ::= <var> "=" <expr> 
-        \alt <var> "(" <varlist> ")" "=" <expr>
+        \alt <var> "(" <varlist> ")" "=" <expr> "// TODO custom operator definition <<"
         \alt "(" <varlist> ( "|" <var> )? ")" "=" <expr>
         
         <wheredecls> ::= <wheredecl> ";" <wheredecls> | <wheredecl>
     \end{grammar}
 
-    In principle, any Pixy expression with no free variables can be viewed as a self-container program. Our current implementation reads a series of wheredecls and executes a main operator for the sake of ease of use.
+    TODO: example here maybe?
+
+    In principle, any Pixy expression with no free variables can be viewed as a self-contained program. Our current implementation reads a series of wheredecls and executes a main operator for the sake of ease of use.
     
     We support 3 common datatypes: booleans, natural numbers and tuples.
     
     \subsection{Operational semantics}
     
-    Pixy's operational semantics have several stages in order to model the ahead-of-time requirements of the language. This helps to prove by construction that Pixy's key properties hold.
+    Pixy's operational semantics have several stages in order to keep memory allocation and analysis distinct from the actual evaluation steps. This helps keep evaluation simple and allows us to prove quite trivially that for every timestep a Pixy program will perform a bounded amount of computation. We chose to avoid time-indexed computation in order to stay in keeping the idea that a Pixy program only needs its immediate state in order to keep functioning - that is to say, a Pixy program can remain coinductively on time and correct using a fixed amount of preallocated memory.
     
     The first stage is used to flatten out any operator calls. Since recursive operator calls could lead to unbounded memory usage during evaluation, Pixy requires all operator calls including recursive ones to be flattened out before evaluation. In order to predict the maximum possible recursion depth and allocate memory for it ahead of time, we use a technique based on sized types.
     
@@ -190,13 +198,21 @@ x = 1;
 y = x + next x;
     \end{lstlisting}
     
-    Following the basic semantics, at $t_1$ $x$ will be 1, and when computing $y$ we will take 1 and try to add it to $\nextop x$, which dropped the value $1$ and is equal to $nil$ in this case. This is counter-intuitive since $x + \nextop x$ looks like it means "wait for $\nextop x$" then add $x$ to it. When considering this issue we found that it was possible to reimplement the intuitive interpretation using implicit buffering, or delay compensation.
+    TODO: why don't we need to index time? because induction
+    
+    Following a naive reading of the evaluation semantics, at $t_1$ $x$ will be 1, and when computing $y$ we will take 1 and try to add it to $\nextop x$, which dropped the value $1$ and is equal to $nil$ in this case. This is counter-intuitive since $x + \nextop x$ looks like it means "wait for $\nextop x$" then add $x$ to it. When considering this issue we found that it was possible to reimplement the intuitive interpretation using implicit buffering, or delay compensation.
     
     The syntax for derivations of this stage looks like this:
     
     \begin{align*}
-    d \vdash E \initrel S; \delta; \Delta
+    \mathcal{V}; \mathcal{D}; n; d \vdash E \initrel S; \delta; \Delta; \mathcal{D}'
     \end{align*}
+    
+    $\mathcal{V}$ is the set of names that are currently being defined by a where expression.
+    
+    $\mathcal{D}$ is a mapping of names to buffer sizes - any named variable has a buffer size of at least 1. This is used to allow next to be implemented correctly.
+    
+    $n$ is the number of nested next expressions within which $E$ is contained.
     
     $d$ is the number of nested fby expressions containing $E$ (initially 0)
     
@@ -206,81 +222,141 @@ y = x + next x;
     
     $\Delta$ is the set of constraints on pre-delay time. These are to be solved by a constraint solver in order to derive the appropriate pre-delays of any expression.
     
-    In order to perform delay compensation, some initial state will use a notation $Q[x]$ as a shorthand for creating a queue of length $x$. This queue will initially be empty, and should be filled at maximum to capacity $x$.
+    $\mathcal{D}'$ is the updated mapping of names to buffer sizes accounting for $E$.
+    
+    \paragraph{Binop}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        d \vdash A \initrel S_a; \delta_a; \Delta_a \\
-        d \vdash B \initrel S_b; \delta_b; \Delta_b \\
+        \mathcal{V}; \mathcal{D}; n; d \vdash A \initrel S_a; \delta_a; \Delta_a; \mathcal{D}_a \\
+        \mathcal{V}; \mathcal{D}; n; d \vdash B \initrel S_b; \delta_b; \Delta_b; \mathcal{D}_b
         \end{matrix}
     }{
-        d \vdash A \; op \; B \initrel (S_a, Q[\max(\delta_a, \delta_b) - \delta_a], S_b, Q[\max(\delta_a, \delta_b) - \delta_b]); \max(\delta_a, \delta_b); \Delta_a, \Delta_b
+        \mathcal{V}; \mathcal{D}; n; d \vdash A \; op \; B \initrel (S_a, S_b); \max(\delta_a, \delta_b); \Delta_a, \Delta_b; \mathcal{D}_a \cup \mathcal{D}_b
     }[\text{Init-binop}]
     \end{align*}
     
+    \paragraph{Conditionals}
+    
     \begin{align*}
     \frac{
         \begin{matrix}
-        d \vdash C \initrel S_C; \delta_C; \Delta_C \\
-        d \vdash T \initrel S_T; \delta_T; \Delta_T \\
-        d \vdash F \initrel S_F; \delta_F; \Delta_F
+        \mathcal{V}; \mathcal{D}; n; d \vdash C \initrel S_C; \delta_C; \Delta_C; \mathcal{D}_C \\
+        \mathcal{V}; \mathcal{D}; n; d \vdash T \initrel S_T; \delta_T; \Delta_T; \mathcal{D}_T \\
+        \mathcal{V}; \mathcal{D}; n; d \vdash F \initrel S_F; \delta_F; \Delta_F; \mathcal{D}_F
         \end{matrix}
     }{
-        d \vdash \ifop C \thenop T \elseop F \initrel (S_C, Q[m-\delta_C], S_T, Q[m-\delta_T], S_F, Q[m-\delta_F]); m; \Delta_C, \Delta_T, \Delta_F
+        \mathcal{V}; \mathcal{D}; n; d \vdash \ifop C \thenop T \elseop F \initrel (S_C, S_T, S_F); m; \Delta_C, \Delta_T, \Delta_F; \mathcal{D}_C \cup \mathcal{D}_T \cup \mathcal{D}_F
     }[\text{Init-if}]
     \end{align*}
     
     where $m = \max(\delta_C, \delta_T, \delta_F)$
     
+    \paragraph{Next}
+    
     \begin{align*}
     \frac{
         \begin{matrix}
-        d \vdash E \initrel S; \delta; \Delta
+        \mathcal{V}; \mathcal{D}; n+1; d \vdash E \initrel S; \delta; \Delta
         \end{matrix}
     }{
-        d \vdash \nextop E \initrel (false, S); \delta+1; \Delta
+        \mathcal{V}; \mathcal{D}; n; d \vdash \nextop E \initrel (false, S); \delta+1; \Delta
     }[\text{Init-next}]
     \end{align*}
     
+    \paragraph{Fby}
+    
     \begin{align*}
     \frac{
         \begin{matrix}
-        d \vdash A \initrel S_a; \delta_a; \Delta_a \\
-        d+1 \vdash B \initrel S_b; \delta_b; \Delta_b \\
+        \mathcal{V}; \mathcal{D}; n; d \vdash A \initrel S_a; \delta_a; \Delta_a \\
+        \mathcal{V}; \mathcal{D}; n; d+1 \vdash B \initrel S_b; \delta_b; \Delta_b \\
         \end{matrix}
     }{
-        d \vdash A \fby B \initrel (false, nil, S_a, S_b); \delta_a; \Delta_a, \Delta_b, \delta_a \geq \delta_b - d
+        \mathcal{V}; \mathcal{D}; n; d \vdash A \fby B \initrel (false, nil, S_a, S_b); \delta_a; \Delta_a, \Delta_b, \delta_a \geq \delta_b - d
     }[\text{Init-fby}]
     \end{align*}
     
+    \paragraph{Id}
+    
+    When a variable is encountered, initialisation needs to update the maximum number of steps into the future from which this variable will be accessed ($\mathcal{D}$).
+    
+    We also need to store the correct index at which to access the variable's buffer ($n$), as well as computing the pre-delay this variable access will have.
+    
+    There are two cases for variable pre-delay: if we are still among the where clauses where the variable was defined, we will access it with a delay of 1 since all where clauses run synchronously and all variables defined by a where clause will be $nil$ at time 0. Otherwise, such as when a variable is passed as an argument to an operator or when we are in the body of a where expression, the value will be available immediately so we do not introduce any additional delays.
+    
     \begin{align*}
-    \frac{}{
-        d \vdash I \initrel (); \delta(I);
-    }[\text{Init-id}]
+    \frac{
+        \begin{matrix}
+        I \in \mathcal{V}
+        \end{matrix}
+    }{
+        \mathcal{V}; \mathcal{D}; n; d \vdash I \initrel n; \delta(I) + 1; \emptyset ; [I \to \max(\mathcal{D}(I), n+1)]\mathcal{D}
+    }[\text{Init-id-whereclause}]
     \end{align*}
     
     \begin{align*}
     \frac{
         \begin{matrix}
-        \overline{d \vdash V \initrel S_v; \delta_v; \Delta_v}^{V...} \\
-        d \vdash E \initrel S; \delta; \Delta
+        I \notin \mathcal{V}
         \end{matrix}
     }{
-        d \vdash [A=V...]E \initrel (S, (S_v...), (Q[\max(\delta_v...) - \delta_v]...)); \delta; \Delta, \Delta_v..., \delta(A)=\delta_v...
+        \mathcal{V}; \mathcal{D}; n; d \vdash I \initrel n; \delta(I); \emptyset ; [I \to \max(\mathcal{D}(I), n+1)]\mathcal{D}
+    }[\text{Init-id-nodelay}]
+    \end{align*}
+    
+    \paragraph{Operator scope}
+    
+    Initialising operator scope poses a particular problem. While computing initial state and delay values is fairly straightforward, computing the buffer sizes for variables under renaming is quite problematic. Our initial approach involved recursing over the argument values first, but this proved inadequate.
+    
+    Counter-example:
+    
+    \begin{lstlisting}
+foo(y) = next y
+x = 1
+z = foo(next x)
+    \end{lstlisting}
+    
+    In this case it would be unclear what the buffering of $x$ should be, since we would try to compute this before realising that it is referenced under the name $y$ inside another next in the body of $foo$.
+    
+    A human onlooker might notice that due to renaming the variable $x$ requires a buffer size of 3 (one for the implicit where clause, 2 for the 2 nested nexts). To make this case work, we first process the body of the operator assuming the arguments have a buffer size initialised at 1. Of course, the arguments do not actually have a buffer at all. We simply use this to extract information from the body on where the arguments are used. If they appear inside a next expression then the resulting $\mathcal{D}'(A)$ will be greater than 1. Once we have gathered this information, we go back and initialise the arguments with $\mathcal{D}'(A)-1$ as the number of nested next expressions in which they can be found.
+    
+    In our example above, since $y$ is inside one next expression inside $foo$, $\nextop x$ will be initialised  with a starting number of nexts equal to 1, leading to $x$ gaining the correct buffer size of 3.
+    
+    \begin{align*}
+    \frac{
+        \begin{matrix}
+        \mathcal{V} \setminus \{A...\}; \mathcal{D}, A=1...; n; d \vdash E \initrel S; \delta; \Delta; \mathcal{D}' \\
+        \overline{\mathcal{V}; \mathcal{D}; \mathcal{D}'(A)-1; d \vdash V \initrel S_v; \delta_v; \Delta_v, \mathcal{D_v}}^{V...} \\
+        D'' = \bigcup D_v...
+        \end{matrix}
+    }{
+        \mathcal{V}; \mathcal{D}; n; d \vdash [A=V...]E \initrel (S, (S_v...)); \delta; \Delta, \Delta_v..., \delta(A)=\delta_v...; \mathcal{D}''
     }[\text{Init-operator-scope}]
     \end{align*}
     
+    \paragraph{Where}
+    
+    During init, where has to perform a few different functions. The obvious thing where does is initialise the state of all its subexpressions and account for scoping.
+    
+    The more unusual thing where does is allocate buffers and store pre-delays for its evaluating counterpart.
+    
     \begin{align*}
     \frac{
         \begin{matrix}
-        \overline{d \vdash V \initrel S_v; \delta_v; \Delta_v}^{V...} \\
-        d \vdash E \initrel S; \delta; \Delta
+        \overline{\mathcal{V} \cup \{N...\}; \mathcal{D}, N=1...; n; d \vdash V \initrel S_v; \delta_v; \Delta_v; \mathcal{D}_v}^{V...} \\
+        \mathcal{D}' = \bigcup \mathcal{D}_u... \\
+        d \vdash E \initrel S; \delta; \Delta; \mathcal{D}_E
         \end{matrix}
     }{
-        d \vdash E \where \{ N=V... \} \initrel (S, (nil...), (S_v...)); \delta; \Delta, \Delta_v..., \delta(N)=\delta_v...
+        \mathcal{V}; \mathcal{D}; n; d \vdash E \where \{ N=V... \} \initrel S; \delta; \Delta, \Delta_v..., \delta(N)=\delta_v...; \mathcal{D}' \cup \mathcal{D}_E
     }[\text{Init-where}]
     \end{align*}
+    
+    where $S = (S, (nil...), (S_v...), (\delta_v...), (\mathcal{B}[\mathcal{D}'(N)]...))$
+    
+    $\mathcal{B}[N]$ is a shorthand for allocating a ring buffer of size $N$. This is so that variables inside a next expression can reference values from the "future".
     
     \subsubsection{Proof of $\delta$ correctness}
     
@@ -430,7 +506,7 @@ y = x + next x;
     }[\text{Eval-where}]
     \end{align*}
     
-    An interesting observation here is that even under choke-evaluation where expression still evaluate their internal state. This is because the where's internal state is not directly visible - hidden computation can occur as long as it is not returned from the main body of the where.
+    An interesting observation here is that even under choke-evaluation where expressions still evaluate their internal state. This is because the where's internal state is not directly visible - hidden computation can occur as long as it is not returned from the main body of the where.
     
     \begin{align*}
     \frac{
@@ -593,6 +669,10 @@ y = x + next x;
         \Gamma, () \vdash I \ceval nil; ()
     }[\text{Eval-id-C}]
     \end{align*}
+    
+    \section{Implementation}
+    
+    TODO
     
     \section{Comments and future work}
     
