@@ -1,5 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
-module Pixy.Delay where
+module Pixy.Delay
+    (genConstraints)
+where
 
 import Control.Monad.State.Lazy
 import Control.Monad.Reader
@@ -121,10 +123,9 @@ constraints = \case
             let vargs = Map.fromList $ zip argnames args
             in local (\s -> s { varDelays = Map.union vargs (varDelays s), whereVars = argnames}) (constraints body)
 
-genConstraints :: [Function] -> Maybe [Int]
-genConstraints fs = tryHead $ runFD $ do
-    let (Just (Function _ _ body)) = find (\(Function n _ _) -> n == "main") fs
-    (mdelay, vars) <- runDelay (constraints body) fs
+genConstraints :: [Function] -> Expr -> Maybe [Int]
+genConstraints fs e = tryHead $ runFD $ do
+    (mdelay, vars) <- runDelay (constraints e) fs
     label vars
     where
         tryHead :: [a] -> Maybe a

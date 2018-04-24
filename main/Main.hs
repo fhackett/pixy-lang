@@ -54,7 +54,7 @@ exec o = do
         Left err -> die err
         Right fs -> 
             if dumpConstraints o then do
-                let cs = genConstraints fs
+                let cs = genConstraints fs (App "main" [])
                 putStrLn "--[Constraints]--"
                 traverse_ print cs
                 putStrLn "--[Reduced]--"

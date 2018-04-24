@@ -4,8 +4,8 @@ module Pixy.Eval where
 import Prelude hiding (init)
 import qualified Prelude as P (init)
 import Control.Monad.Except
-import Control.Monad.RWS
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Monad.Identity
 import Data.Void
 import Data.Bifunctor
@@ -14,8 +14,12 @@ import Data.Ord (comparing)
 import Data.Semigroup 
 import Pixy.Syntax
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import qualified Data.Map.Merge.Strict as Map
+import qualified Data.Sequence as Seq
 import Data.List (find)
 import Data.Map.Strict (Map)
+import Data.Sequence (Seq(..))
 import System.Exit
 --DEBUGGING
 import Debug.Trace
@@ -45,19 +49,31 @@ instance Monoid MaxNat where
     mappend = max 
     mempty = 1
 
-init :: (MonadRWS [Function] MaxNat [Int] m) => Expr -> m ExprS
+data InitState = InitState
+    { delayStack :: [Int]
+    , bufferSizes :: Map Var Int
+    }
+
+data InitReaderState = InitReaderState
+    { functions :: [Function]
+    , depth :: Int
+    }
+
+init :: (MonadReader InitReaderState m, MonadState InitState m) => Expr -> m ExprS
 init = \case
-    (Var x) -> return $ VarS x
+    (Var x) -> do
+        recordDepth x 
+        return $ VarS x
     (Const k) -> return $ ConstS k
     (If c t f) -> IfS <$> init c <*> init t <*> init f
     (Fby l r) -> FbyS False <$> init l <*> init r
-    (Next e) -> NextS <$> censor (+1) (init e)
+    (Next e) -> NextS <$> nextDepth (init e)
     (Where body bs) -> do
-        bs' <- Map.fromList <$> traverse initVar bs
-        (body', b) <- listen (init body)
-        writer (WhereS body' bs', b)
+        bs' <- initWhereVars bs
+        body' <- (init body)
+        return $ WhereS body' bs'
     (App fname args) -> do
-        f <- find (\(Function n _ _) -> n == fname) <$> ask
+        f <- find (\(Function n _ _) -> n == fname) <$> asks functions
         args' <- init `mapM` args
         case f of
             Just (Function _ argNames e) -> AppS <$> init e <*> pure (Map.fromList $ zip argNames args')
@@ -65,29 +81,44 @@ init = \case
     (Binop op l r) -> BinopS op <$> init l <*> init r
     (Unary op e) -> UnaryS op <$> init e
     where
-        initVar :: (MonadRWS [Function] MaxNat [Int] m) => (Var, Expr) -> m (Var, VarInfo)
+        initVar :: (MonadReader InitReaderState m, MonadState InitState m) => (Var, Expr) -> m (Var, VarInfo)
         initVar (v,e) = do
             d <- popDelay
-            (e', b) <- listens getMaxNat (init e)
-            return (v, VarInfo { varExpr = e', varDelay = d, varBuffer = replicate b VNil })
+            e' <- (init e)
+            return (v, VarInfo { varExpr = e', varDelay = d, varBuffer = Seq.singleton VNil })
 
-        popDelay :: (MonadState [Int] m) => m Int
+        initWhereVars :: (MonadReader InitReaderState m, MonadState InitState m) => [(Var, Expr)] -> m (Map Var VarInfo)
+        initWhereVars bs = do
+            outerSizes <- gets bufferSizes
+            bs' <- Map.fromList <$> traverse initVar bs
+            sizes <- gets bufferSizes
+            let definedSet = Set.fromList $ fst <$> bs
+            modify (\s -> s { bufferSizes = Map.union (Map.withoutKeys sizes definedSet ) outerSizes })
+            return $ Map.merge Map.preserveMissing Map.dropMissing (Map.zipWithMatched (\_ vi n -> vi { varBuffer = Seq.replicate (max n (length $ varBuffer vi)) VNil })) bs' sizes
+
+        nextDepth :: (MonadReader InitReaderState m) => m a -> m a
+        nextDepth = local (\s -> s { depth = (depth s) + 1})
+
+        recordDepth :: (MonadReader InitReaderState m, MonadState InitState m) => Var -> m ()
+        recordDepth x = do
+            d <- asks depth
+            modify (\s -> s { bufferSizes = Map.insertWith max x d (bufferSizes s) })
+
+        popDelay :: (MonadState InitState m) => m Int
         popDelay = do
-            d:ds <- get
-            put ds
+            d:ds <- gets delayStack
+            modify (\s -> s { delayStack = ds })
             return d
 
-runInit :: [Function] -> ExprS
-runInit fs = case genConstraints fs of
-    Just cs -> 
-        let (Just (Function _ _ body)) = find (\(Function n _ _) -> n == "main") fs
-        in fst $ evalRWS (init body) fs cs
+runInit :: [Function] -> Expr -> ExprS
+runInit fs e = case genConstraints fs e of
+    Just cs -> flip evalState (InitState cs Map.empty) $ runReaderT (init e) (InitReaderState fs 1)
 
-withBindings :: (MonadReader (Map Var [Value]) m) => Map Var VarInfo -> m a -> m a
+withBindings :: (MonadReader (Map Var (Seq Value)) m) => Map Var VarInfo -> m a -> m a
 withBindings !bs = local (Map.union (fmap varBuffer bs))
 -- withBindings bs = local (Map.union (Map.mapWithKey (\v vi -> let vb = varBuffer vi in trace (show v ++ ":" ++ show vb) vb) bs))
 
-eval :: (MonadReader (Map Var [Value]) m) => ExprS -> m (ExprS, Value)
+eval :: (MonadReader (Map Var (Seq Value)) m) => ExprS -> m (ExprS, Value)
 eval = \case
         (VarS x) -> (VarS x,) <$> lookupValue x 
         (ConstS k) -> return (ConstS k, k)
@@ -135,16 +166,16 @@ eval = \case
             let resVal = evalUnary op eVal
             return (UnaryS op e', resVal)
     where
-        lookupValue :: (MonadReader (Map Var [Value]) m) => Var -> m Value
+        lookupValue :: (MonadReader (Map Var (Seq Value)) m) => Var -> m Value
         lookupValue x = do
             vm <- ask
             case Map.lookup x vm of
-                Just (v:_) -> return v
-                Just ([]) -> error $ "lookupValue: Variable " ++ x ++ " has an empty buffer"
+                Just (v :<| _) -> return v
+                Just (_) -> error $ "lookupValue: Variable " ++ x ++ " has an empty buffer"
                 Nothing -> error $ "lookupValue: Undefined variable " ++ x
 
-        nextValue :: (MonadReader (Map Var [Value]) m) => m a -> m a
-        nextValue = local (fmap tail)
+        nextValue :: (MonadReader (Map Var (Seq Value)) m) => m a -> m a
+        nextValue = local (fmap $ Seq.drop 1)
 
         evalBinop :: Binop -> Value -> Value -> Value
         evalBinop Plus (VInt i) (VInt j) = VInt (i + j)
@@ -163,29 +194,27 @@ eval = \case
         evalBinop GreaterThanEquals (VInt i) (VInt j) = VBool (i >= j)
         evalBinop GreaterThan (VInt i) (VInt j) = VBool (i > j)
         evalBinop op lVal rVal = error $ "Operand Mismatch: " ++ show op ++ " " ++ show lVal ++ " " ++ show rVal --throwError $ OperandMismatch op lVal rVal
-                -- (op, lVal, rVal) -> 
-                -- (Modulo, VInt i, VInt j) -> VInt (i `mod` j)
-                -- (Equals, VInt i, VInt j) -> VBool (i == j)
-                -- (Equals, VInt i, VInt j) -> VBool (i == j)
-                -- (_, VNil, VNil) -> il
+
         evalUnary Not (VBool b) = VBool (not b)
         evalUnary Check v = VBool (v /= VNil)
         evalUnary Trace v = trace ("Trace:" ++ show v) v
         evalUnary op e = error $ "Operand Mismatch: " ++ show op ++ " " ++ show e
 
         argBindings :: Map Var (ExprS, Value) -> Map Var VarInfo
-        argBindings = fmap (\(e,v) -> VarInfo e 0 [v]) 
+        argBindings = fmap (\(e,v) -> VarInfo e 0 $ Seq.singleton v) 
 
-evalBinding :: (MonadReader (Map Var [Value]) m) => Var -> VarInfo -> m VarInfo
+evalBinding :: (MonadReader (Map Var (Seq Value)) m) => Var -> VarInfo -> m VarInfo
 evalBinding x (VarInfo e d vs) 
-    | d > 0 = return $ VarInfo e (d - 1) vs
+    | d > 0 = do
+        e' <- chokeEval e
+        return $ VarInfo e' (d - 1) vs
     | otherwise = do
-        (e', v) <- local (Map.update (Just . reverse) x) (eval e)
-        let vs' = (v:P.init vs)
+        (e', v) <- eval e
+        let vs' = v :<| (Seq.take (length vs - 1) vs)
         return $ VarInfo e' d vs'
 
 
-chokeEval :: (MonadReader (Map Var [Value]) m) => ExprS -> m ExprS
+chokeEval :: (MonadReader (Map Var (Seq Value)) m) => ExprS -> m ExprS
 chokeEval = \case 
     (VarS x) -> return $ VarS x
     (ConstS k) -> return $ ConstS k
@@ -201,13 +230,12 @@ chokeEval = \case
     (UnaryS op e) -> UnaryS op <$> chokeEval e
     where
         argBindings :: Map Var ExprS -> Map Var VarInfo
-        argBindings = fmap (\e -> VarInfo e 0 [VNil])
+        argBindings = fmap (\e -> VarInfo e 0 $ Seq.singleton VNil)
 
 evalLoop :: [Function] -> Expr -> [Value]
 evalLoop fs e =
-    let (Just cs) = genConstraints fs
-        (Just (Function _ _ body)) = find (\(Function n _ _) -> n == "main") fs
-    in loop $ fst $ evalRWS (init e) fs cs
+    let (Just cs) = genConstraints fs e
+    in loop $ runInit fs e
     where
         loop :: ExprS -> [Value]
         loop s =

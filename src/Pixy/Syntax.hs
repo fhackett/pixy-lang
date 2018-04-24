@@ -5,6 +5,7 @@ module Pixy.Syntax where
 import Data.Void
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
+import Data.Sequence (Seq)
 import Data.STRef
 
 type Var = String
@@ -69,7 +70,7 @@ data ExprS
 data VarInfo = VarInfo 
     { varExpr :: ExprS
     , varDelay :: Int
-    , varBuffer :: [Value]
+    , varBuffer :: Seq Value
     }
     deriving (Show)
 
