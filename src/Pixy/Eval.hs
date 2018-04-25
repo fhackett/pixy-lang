@@ -4,18 +4,22 @@ module Pixy.Eval where
 import Prelude hiding (init)
 import qualified Prelude as P (init)
 import Control.Monad.Except
-import Control.Monad.RWS
 import Control.Monad.Reader
-import Control.Monad.Identity
+import Control.Monad.State
+import Control.Monad.RWS.Strict
 import Data.Void
 import Data.Bifunctor
 import Data.Foldable
 import Data.Ord (comparing)
-import Data.Semigroup 
+import Data.Maybe (fromMaybe) 
 import Pixy.Syntax
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import qualified Data.Map.Merge.Strict as Map
+import qualified Data.Sequence as Seq
 import Data.List (find)
-import Data.Map (Map)
+import Data.Map.Strict (Map, (!))
+import Data.Sequence (Seq(..), (!?))
 import System.Exit
 --DEBUGGING
 import Debug.Trace
@@ -45,52 +49,122 @@ instance Monoid MaxNat where
     mappend = max 
     mempty = 1
 
-init :: (MonadRWS [Function] MaxNat [Int] m) => Expr -> m ExprS
+data InitState = InitState
+    { delayStack :: [Int]
+    }
+
+data InitReaderState = InitReaderState
+    { functions :: [Function]
+    , fbyDepth :: Int
+    }
+
+data InitWriter = InitWriter 
+    { bufferSizes :: Map Var Int 
+    }
+
+instance Monoid InitWriter where
+    mempty = InitWriter Map.empty
+    mappend (InitWriter bx) (InitWriter by) = InitWriter (Map.unionWith max bx by) 
+
+init :: (MonadRWS InitReaderState InitWriter InitState m) => Expr -> m ExprS
 init = \case
-    (Var x) -> return $ VarS x
+    (Var x) -> do
+        d <- asks fbyDepth
+        trace (x ++" Needs buffer of size " ++ show d) writer (VarS x (d - 1), InitWriter (Map.singleton x d))
     (Const k) -> return $ ConstS k
     (If c t f) -> IfS <$> init c <*> init t <*> init f
-    (Check e) -> CheckS <$> init e
-    (Fby l r) -> FbyS False <$> init l <*> init r
-    (Next e) -> NextS <$> censor (+1) (init e)
+    (Fby l r) -> FbyS False <$> init l <*> (addDepth 1 $ init r)
+    (Next e) -> addDepth (-1) (init e)
     (Where body bs) -> do
-        bs' <- Map.fromList <$> traverse initVar bs
-        (body', b) <- listen (init body)
-        writer (WhereS body' bs', b)
+        bs' <- initWhereVars bs
+        -- Prevent lookups from hitting the -1 index
+        body' <- addDepth 1 $ init body
+        return $ WhereS body' bs'
     (App fname args) -> do
-        f <- find (\(Function n _ _) -> n == fname) <$> ask
-        args' <- init `mapM` args
+        f <- find (\(Function n _ _) -> n == fname) <$> asks functions
         case f of
-            Just (Function _ argNames e) -> AppS <$> init e <*> pure (Map.fromList $ zip argNames args')
+            Just f -> initApp f args
             Nothing -> error $ "init: Undefined Function " ++ fname
     (Binop op l r) -> BinopS op <$> init l <*> init r
     (Unary op e) -> UnaryS op <$> init e
     where
-        initVar :: (MonadRWS [Function] MaxNat [Int] m) => (Var, Expr) -> m (Var, VarInfo)
+        initVar ::  (MonadRWS InitReaderState InitWriter InitState m) => (Var, Expr) -> m (Var, VarInfo)
         initVar (v,e) = do
             d <- popDelay
-            (e', b) <- listens getMaxNat (init e)
-            return (v, VarInfo { varExpr = e', varDelay = d, varBuffer = replicate b VNil })
+            e' <- addDepth d (init e)
+            return (v, VarInfo { varExpr = e', varDelay = d, varBuffer = Seq.singleton VNil })
 
-        popDelay :: (MonadState [Int] m) => m Int
+        initWhereVars :: (MonadRWS InitReaderState InitWriter InitState m) => [(Var, Expr)] -> m (Map Var VarInfo)
+        initWhereVars bs = do
+            (bs', sizes) <- listens bufferSizes $ Map.fromList <$> traverse initVar bs
+            let definedSet = Set.fromList $ fst <$> bs
+            trace ("Buffers:" ++ (show $ sizes)) return () 
+            let vm = Map.merge Map.preserveMissing Map.dropMissing (Map.zipWithMatched (\_ vi n -> vi { varBuffer = mkBuffer n })) bs' sizes
+            censor (\w -> w { bufferSizes = Map.withoutKeys (bufferSizes w) definedSet }) (return vm)
+
+        initApp :: (MonadRWS InitReaderState InitWriter InitState m) => Function -> [Expr] -> m ExprS
+        initApp (Function fname argNames e) args = do
+            trace ("Initializing Function " ++ fname) return ()
+            fDepth <- popDelay
+            depth <- asks fbyDepth
+            trace ("ExtraFunctionDepth: " ++ show fDepth) return ()
+            trace ("Depth: " ++ show depth) return ()
+            -- Get the Max Delay map from the body
+            depth <- asks fbyDepth
+            -- Compute the extra depths added by each argument
+            (e' , argBuffers) <- censor (const mempty) $ listens (Map.filterWithKey (\k _ -> k `elem` argNames) . bufferSizes) $ addDepth (fDepth - depth + 1) $ init e
+            let argLevels = fmap (fromMaybe 0 . flip Map.lookup argBuffers) argNames
+            args' <- traverse (\(n, a, l) -> initArg n a fDepth l) $ zip3 argNames args argLevels
+            let argMap = Map.fromList args'
+            trace ("ArgBuffers:" ++ (show $ fmap varBuffer argMap)) return () 
+            return (AppS e' argMap)
+
+        initArg :: (MonadRWS InitReaderState InitWriter InitState m) => Var -> Expr -> Int -> Int -> m (Var, VarInfo)
+        initArg x a fDepth argBuffer = do
+            -- we need to subtract the delay of the argument from arg buffer size
+            depth <- asks fbyDepth
+            trace ("Evaluating Argument " ++ show a) return ()
+            (a', sizes) <- listens bufferSizes $ addDepth (-fDepth) $ init a
+            let d = maybe 0 snd $ Map.lookupMax sizes
+            -- trace ("ArgBuffer " ++ x ++ " : " ++ show argBuffer) return ()
+            return (x, VarInfo a' 0 (mkBuffer argBuffer))
+
+
+        mkBuffer :: Int -> Seq Value
+        mkBuffer n = Seq.replicate n VNil
+
+        addDepth :: (MonadReader InitReaderState m) => Int -> m a -> m a
+        addDepth k = local (\s -> s { fbyDepth = (fbyDepth s) + k})
+
+        popDelay :: (MonadState InitState m) => m Int
         popDelay = do
-            d:ds <- get
-            put ds
+            d:ds <- gets delayStack
+            modify (\s -> s { delayStack = ds })
             return d
 
-runInit :: [Function] -> ExprS
-runInit fs = case genConstraints fs of
-    Just cs -> 
-        let (Just (Function _ _ body)) = find (\(Function n _ _) -> n == "main") fs
-        in fst $ evalRWS (init body) fs cs
+runInit :: [Function] -> Expr -> ExprS
+runInit fs e = case genConstraints fs e of
+    Just cs -> fst $ evalRWS (init e) (initReaderState fs) (initState cs)
+    where
+        initReaderState fs = InitReaderState { functions = fs, fbyDepth = 0 }
+        initState cs = InitState { delayStack = cs }
 
-withBindings :: (MonadReader (Map Var [Value]) m) => Map Var VarInfo -> m a -> m a
-withBindings bs = local (Map.union (fmap varBuffer bs))
--- withBindings bs = local (Map.union (Map.mapWithKey (\v vi -> let vb = varBuffer vi in trace (show v ++ ":" ++ show vb) vb) bs))
+withBindings :: (MonadReader EvalState m) => Map Var VarInfo -> m a -> m a
+withBindings bs = local (\s -> s { buffers = Map.union (fmap varBuffer bs) (buffers s) })
 
-eval :: (MonadReader (Map Var [Value]) m) => ExprS -> m (ExprS, Value)
+data EvalState = EvalState
+    { buffers :: Map Var (Seq Value)
+    , bufferIndex :: Int
+    }
+
+initEvalState = EvalState
+    { buffers = Map.empty
+    , bufferIndex = 0
+    }
+
+eval :: (MonadReader EvalState m) => ExprS -> m (ExprS, Value)
 eval = \case
-        (VarS x) -> (VarS x,) <$> lookupValue x 
+        (VarS x offset) -> (VarS x offset,) <$> lookupValue x offset
         (ConstS k) -> return (ConstS k, k)
         (IfS c t f) -> do
             (c',cVal) <- eval c
@@ -104,11 +178,6 @@ eval = \case
                     (f', fVal) <- eval f
                     return (IfS c' t' f', fVal)
                 v -> error "Boolean Expected!"
-        (CheckS e) -> do
-            (e', eVal) <- eval e
-            case eVal of
-                VNil -> return (CheckS e', VBool False)
-                _ -> return (CheckS e', VBool True)
         (FbyS latch l r) -> 
             if latch then do
                 l' <- chokeEval l
@@ -120,17 +189,14 @@ eval = \case
                 case lVal of
                     VNil -> return (FbyS False l' r', VNil)
                     v -> return (FbyS True l' r', v)
-        (NextS e) -> do
-            (e', eVal) <- nextValue (eval e)
-            return (NextS e', eVal)
         (WhereS body bs) -> do
             bs' <- withBindings bs (Map.traverseWithKey evalBinding bs)
             (body', bodyVal) <- withBindings bs' (eval body)
             return (WhereS body' bs', bodyVal)
         (AppS f args) -> do
-            args' <- mapM eval args
-            (f', fVal) <- withBindings (argBindings args') (eval f)
-            return (AppS f' (fmap fst args'), fVal)
+            args' <- Map.traverseWithKey evalBinding args
+            (f', fVal) <- withBindings args' (eval f)
+            return (AppS f' args', fVal)
         (BinopS op l r) -> do
             (l', lVal) <- eval l
             (r', rVal) <- eval r
@@ -141,16 +207,26 @@ eval = \case
             let resVal = evalUnary op eVal
             return (UnaryS op e', resVal)
     where
-        lookupValue :: (MonadReader (Map Var [Value]) m) => Var -> m Value
-        lookupValue x = do
-            vm <- ask
-            case Map.lookup x vm of
-                Just (v:_) -> return v
-                Just ([]) -> error $ "lookupValue: Variable " ++ x ++ " has an empty buffer"
-                Nothing -> error $ "lookupValue: Undefined variable " ++ x
+        lookupValue :: (MonadReader EvalState m) => Var -> Int -> m Value
+        lookupValue x offset = do
+            vm <- asks buffers
+            let buff = vm ! x
+            case buff !? offset of
+                Just v -> return v
+                Nothing -> error $ "lookupValue: Tried to lookup buffer for " ++ x ++ " at index " ++ show offset ++ " with buffer size " ++ (show $ Seq.length buff)
 
-        nextValue :: (MonadReader (Map Var [Value]) m) => m a -> m a
-        nextValue = local (fmap tail)
+            -- let vs = (buffers s) ! x
+            -- if (currentVar s) == x 
+            --     then undefined
+            --     else undefined
+
+            -- case Map.lookup x vm of
+            --     Just (vs) -> return v
+            --     Just (_) -> error $ "lookupValue: Variable " ++ x ++ " has an empty buffer"
+            -- --     Nothing -> error $ "lookupValue: Undefined variable " ++ x
+
+        -- addIndex :: (MonadReader EvalState m) => Int -> m a -> m a
+        -- addIndex k = local (\s -> s { bufferIndex =  + (bufferIndex s) })
 
         evalBinop :: Binop -> Value -> Value -> Value
         evalBinop Plus (VInt i) (VInt j) = VInt (i + j)
@@ -169,53 +245,51 @@ eval = \case
         evalBinop GreaterThanEquals (VInt i) (VInt j) = VBool (i >= j)
         evalBinop GreaterThan (VInt i) (VInt j) = VBool (i > j)
         evalBinop op lVal rVal = error $ "Operand Mismatch: " ++ show op ++ " " ++ show lVal ++ " " ++ show rVal --throwError $ OperandMismatch op lVal rVal
-                -- (op, lVal, rVal) -> 
-                -- (Modulo, VInt i, VInt j) -> VInt (i `mod` j)
-                -- (Equals, VInt i, VInt j) -> VBool (i == j)
-                -- (Equals, VInt i, VInt j) -> VBool (i == j)
-                -- (_, VNil, VNil) -> il
+
         evalUnary Not (VBool b) = VBool (not b)
+        evalUnary Check v = VBool (v /= VNil)
         evalUnary Trace v = trace ("Trace:" ++ show v) v
         evalUnary op e = error $ "Operand Mismatch: " ++ show op ++ " " ++ show e
 
-        argBindings :: Map Var (ExprS, Value) -> Map Var VarInfo
-        argBindings = fmap (\(e,v) -> VarInfo e 0 [v]) 
-
-evalBinding :: (MonadReader (Map Var [Value]) m) => Var -> VarInfo -> m VarInfo
+evalBinding :: (MonadReader EvalState m) => Var -> VarInfo -> m VarInfo
 evalBinding x (VarInfo e d vs) 
-    | d > 0 = return $ VarInfo e (d - 1) vs
+    | d > 0 = do
+        e' <- chokeEval e
+        return $ VarInfo e' (d - 1) vs
     | otherwise = do
-        (e', v) <- local (Map.update (Just . reverse) x) (eval e)
-        let vs' = (v:P.init vs)
-        return $ VarInfo e' d vs'
+        (e', v) <- eval e
+        let (vs' :|> _) = vs
+        return $ VarInfo e' d (v :<| vs')
+        -- let vi = VarInfo e' d (v :<| vs')
+        -- trace (x ++ " has Buffer " ++ show vs) return vi
 
 
-chokeEval :: (MonadReader (Map Var [Value]) m) => ExprS -> m ExprS
+chokeEval :: (MonadReader EvalState m) => ExprS -> m ExprS
 chokeEval = \case 
-    (VarS x) -> return $ VarS x
+    (VarS x offset) -> return $ VarS x offset
     (ConstS k) -> return $ ConstS k
     (IfS c t f) -> IfS <$> chokeEval c <*> chokeEval t <*> chokeEval f
-    (CheckS e) -> CheckS <$> chokeEval e
     (FbyS latch l r) -> FbyS latch <$> chokeEval l <*> chokeEval r
-    (NextS e) -> NextS <$> chokeEval e
     (WhereS body bs) -> WhereS <$> chokeEval body <*> withBindings bs (Map.traverseWithKey evalBinding bs)
     (AppS f args) -> do
-        args' <- mapM chokeEval args
-        f' <- withBindings (argBindings args') (chokeEval f)
+        args' <-  Map.traverseWithKey evalBinding args
+        f' <- withBindings args' (chokeEval f)
         return $ AppS f' args'
     (BinopS op l r) -> BinopS op <$> chokeEval l <*> chokeEval r
     (UnaryS op e) -> UnaryS op <$> chokeEval e
-    where
-        argBindings :: Map Var ExprS -> Map Var VarInfo
-        argBindings = fmap (\e -> VarInfo e 0 [VNil])
+
+    where 
+        chokeEvalArg :: (MonadReader EvalState m) => VarInfo -> m VarInfo
+        chokeEvalArg vi = do
+            e' <- chokeEval (varExpr vi)
+            return $ vi { varExpr = e' }
 
 evalLoop :: [Function] -> Expr -> [Value]
 evalLoop fs e =
-    let (Just cs) = genConstraints fs
-        (Just (Function _ _ body)) = find (\(Function n _ _) -> n == "main") fs
-    in loop $ fst $ evalRWS (init e) fs cs
+    let (Just cs) = genConstraints fs e
+    in loop $ runInit fs e
     where
         loop :: ExprS -> [Value]
         loop s =
-            let (s', v) = runReader (eval s) Map.empty
+            let (!s', !v) = runReader (eval s) initEvalState
             in v:loop s'

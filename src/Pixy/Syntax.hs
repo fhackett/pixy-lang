@@ -5,6 +5,7 @@ module Pixy.Syntax where
 import Data.Void
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
+import Data.Sequence (Seq)
 import Data.STRef
 
 type Var = String
@@ -31,6 +32,7 @@ data Binop
 
 data Unary
     = Not
+    | Check
     | Trace
     deriving (Show)
 
@@ -38,13 +40,12 @@ data Value
     = VInt !Int
     | VBool !Bool
     | VNil
-    deriving (Show)
+    deriving (Show, Eq)
 
 data Expr
     = Var Var
     | Const Value
     | If Expr Expr Expr
-    | Check Expr
     | Fby Expr Expr
     | Next Expr
     | Where Expr [(Var, Expr)]
@@ -55,22 +56,23 @@ data Expr
 
 -- AST decorated with the state needed for execution
 data ExprS
-    = VarS Var
-    | ConstS Value
-    | IfS ExprS ExprS ExprS
-    | CheckS ExprS
-    | FbyS Bool ExprS ExprS
-    | NextS ExprS
-    | WhereS ExprS (Map Var VarInfo)
-    | AppS ExprS (Map Var ExprS)
-    | BinopS Binop ExprS ExprS
-    | UnaryS Unary ExprS
+    = VarS !Var !Int
+    | ConstS !Value
+    | IfS !ExprS !ExprS !ExprS
+    | FbyS !Bool !ExprS !ExprS
+    | WhereS !ExprS !(Map Var VarInfo)
+    | AppS !ExprS !(Map Var VarInfo)
+    | BinopS !Binop !ExprS !ExprS
+    | UnaryS !Unary !ExprS
     deriving (Show)
 
 data VarInfo = VarInfo 
     { varExpr :: ExprS
     , varDelay :: Int
-    , varBuffer :: [Value]
+    , varBuffer :: Seq Value
     }
     deriving (Show)
+
+
+
 

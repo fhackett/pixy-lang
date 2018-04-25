@@ -25,7 +25,6 @@ brackets d = text "{" <+> d <+> text "}"
 instance Pretty Expr where
     ppr (Var x) = text x
     ppr (Const k) = ppr k
-    ppr (Check e) = text "?" <> ppr e
     ppr (If c t f) = text "if" <+> ppr c <+> text "then" <+> ppr t <+> text "else" <+> ppr f
     ppr (Fby s n) = ppr s <+> text "fby" <+> ppr n
     ppr (Next e) = text "next" <+> ppr e

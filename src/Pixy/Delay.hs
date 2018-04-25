@@ -1,5 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
-module Pixy.Delay where
+module Pixy.Delay
+    (genConstraints)
+where
 
 import Control.Monad.State.Lazy
 import Control.Monad.Reader
@@ -20,8 +22,7 @@ import qualified CLPHS.FD.Domain as Domain
 import Debug.Trace
 
 data DelayState s = DelayState
-    { currentDelay :: Int
-    , fbyDepth :: Int
+    { fbyDepth :: Int
     , varDelays :: Map Var (FDExpr s)
     , whereVars :: [Var]
     , functions :: Map FName Function
@@ -29,8 +30,7 @@ data DelayState s = DelayState
 
 initState :: [Function] -> DelayState s
 initState fs = DelayState
-    { currentDelay = 1
-    , fbyDepth = 1
+    { fbyDepth = 1
     , varDelays = Map.empty
     , whereVars = []
     , functions = Map.fromList $ (\f@(Function n _ _) -> (n,f)) <$> fs
@@ -61,11 +61,10 @@ getFunction n = do
 
 getVarDelay :: Var -> Delay s (FDExpr s)
 getVarDelay x = do
-    s <- ask 
-    return (int $ currentDelay s)
-    if x `elem` whereVars s
-        then return (int $ currentDelay s - 1)
-        else return (int $ currentDelay s)
+    wv <- asks whereVars
+    if x `elem` wv
+        then return (int $ 0)
+        else return (int $ 1)
 
 constraints :: Expr -> Delay s (FDExpr s)
 constraints = \case
@@ -74,13 +73,12 @@ constraints = \case
         d <- getVarDelay x
         return $ (vx + d)
     (Const k) -> return 0
-    (Check e) -> constraints e
     (If c t f) -> do
         cc <- constraints c
         tt <- constraints t
         ff <- constraints f
         return (cmax [cc, tt, ff])
-    (Next e) -> nextDepth (constraints e)
+    (Next e) -> (+1) <$> (constraints e)
     (Fby l r) -> do
         ll <- constraints l
         rr <- fbyRhs (constraints r)
@@ -100,8 +98,6 @@ constraints = \case
         return (cmax [ll, rr])
     (Unary op e) -> constraints e
     where
-        nextDepth :: Delay s a -> Delay s a
-        nextDepth = local (\s -> s { currentDelay = 1 + (currentDelay s)})
 
         fbyRhs :: Delay s a -> Delay s a
         fbyRhs = local (\s -> s { fbyDepth = 1 + (fbyDepth s) })
@@ -123,14 +119,17 @@ constraints = \case
         whereBody bs = local (\s -> s { whereVars = fst <$> bs })
 
         fConstraints :: Function -> [(FDExpr s)] -> Delay s (FDExpr s)
-        fConstraints (Function n argnames body) args = 
+        fConstraints (Function n argnames body) args = do
+            retDelay <- lift $ lift $ new (Domain.range 0 Domain.sup)
+            tell [retDelay]
             let vargs = Map.fromList $ zip argnames args
-            in local (\s -> s { varDelays = Map.union vargs (varDelays s), whereVars = argnames}) (constraints body)
+            bodyDelay <- local (\s -> s { varDelays = vargs, whereVars = argnames}) (constraints body)
+            lift $ lift $ retDelay #== (bodyDelay - cmax args)
+            return bodyDelay
 
-genConstraints :: [Function] -> Maybe [Int]
-genConstraints fs = tryHead $ runFD $ do
-    let (Just (Function _ _ body)) = find (\(Function n _ _) -> n == "main") fs
-    (mdelay, vars) <- runDelay (constraints body) fs
+genConstraints :: [Function] -> Expr -> Maybe [Int]
+genConstraints fs e = tryHead $ runFD $ do
+    (mdelay, vars) <- runDelay (constraints e) fs
     label vars
     where
         tryHead :: [a] -> Maybe a
