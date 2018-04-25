@@ -95,7 +95,7 @@
 
     In principle, any Pixy expression with no free variables can be viewed as a self-contained program. Our current implementation reads a series of wheredecls and executes a main operator for the sake of ease of use.
     
-    You will notice that the grammar above contains $\left<exprtuple \right>$, which can be used to construct tuples. This is a work in progress and not will described in any depth in this paper, but is expected to become part of the language in future work. Broadly speaking, tuples would be able to be constructed and manipulated as an extra data type. The only feature of note is that we expect that tuple literals will function as synchronisation points between streams during pre-delay calculations.
+    You will notice that the grammar above contains $\left<exprtuple \right>$, which can be used to construct tuples. This is a work in progress and will not be described in any depth in this paper, but it is expected to become part of the language in future work. Broadly speaking, tuples would be able to be constructed and manipulated as an extra data type. The only feature of note is that we expect that tuple literals will function as synchronisation points between streams during pre-delay calculations.
     
     \subsection{From an end-user point of view}
     
@@ -216,7 +216,7 @@ x = a + b
     }
     \end{lstlisting}
     
-    Custom operators can be visualised as operating by substitution. They can be defined at any location and do not perform any kind of variable capture - their inner scope is composed entirely of their arguments. $f2$ demonstrates that you can safely use the same name as a parameter and elsewhere and not run into conflicts.
+    Custom operators can be visualised as operating by substitution. They can be defined at any location and do not perform any kind of variable capture - their inner scope is composed entirely of their arguments. $f2$ demonstrates that you can safely use the same name to refer to a parameter and a variable defined outside an operator and not run into conflicts.
     
     Custom operators do not support recursion at the moment - that is a topic for future work.
     
@@ -269,13 +269,13 @@ z = if ?x then x + 1 else 0
     
     This then raises the second question: if an if expression evaluates both of its arguments, why wouldn't the program crash on evaluating $nil + 1$, even if the $0$ is chosen at that time?
     
-    The answer is the concept of choke-evaluation. If if expressions really did evaluate both their arguments then the problem would have no solution - you not be able to shield a given subexpression from encountering $nil$ values.
+    The answer is the concept of choke-evaluation. If if expressions really did evaluate both their arguments then the problem would have no solution - you would not be able to shield a given subexpression from encountering $nil$ values.
     
-    Choke evaluation is applied to a non-taken branch of an if expression in order to make sure any state it has progresses, while "pretending" to not evaluate it. That is, a choke-evaluated expression must always yield $nil$. We achieve this by defining a second mode of evaluation where all literals and variable references return $nil$, as well as defining semantics for all the operators to tolerate $nil$ under most circumstances.
+    Choke evaluation is applied to a non-taken branch of an if expression in order to make sure any state it has progresses, while "pretending" to not evaluate it. That is, a choke-evaluated expression must always yield $nil$ but may perform upkeep internally if need be. We achieve this by defining a second mode of evaluation where all literals and variable references return $nil$, as well as defining semantics for all the operators to tolerate $nil$ under most circumstances.
     
-    For example, in the above program what really is evaluated when $x$ is $nil$ is $nil + nil$, which evaluates to $nil$ without any issue.
+    For example, in the above program what is really evaluated when $x$ is $nil$ is $nil + nil$, which evaluates to $nil$ without any issue.
     
-    The closest thing to an "exception" to choke-evaluation is found when you try to choke-evaluate a where expression. As before, it is required to yield $nil$ in the end, but all the internal definitions are still evaluated.
+    The closest thing to an "exception" to choke-evaluation is when you try to choke-evaluate a where expression. As before, it is required that the expression yields $nil$ in the end, but all the internal definitions are still evaluated.
     
     This is why the following code from the previous section also does what one would expect - $z$ is still updated, since the expression that updates it exists inside a where expression:
     
