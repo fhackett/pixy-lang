@@ -1,3 +1,5 @@
-main() = (next y) where {
+foo(x) = next x
+
+main() = foo(y) where {
     y = 1 fby (y + 1)
 }
