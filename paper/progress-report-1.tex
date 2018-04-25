@@ -46,7 +46,7 @@
     
     This means a few things: every step of computation must be able to meet a deadline, unrelated parts of a program must not be able to interfere with each other's timing and ideally even related parts of a program must never stop each other.
     
-    This requires a heavily asynchronous mindset for which Lucid is a good starting point, since almost everything in Lucid is indeed asynchronous. This also requires avoiding the original Lucid implementation's reliance on indexed streams, since they worked based on a heuristic that would induce arbitrary recomputation in some cases. \footnote{The original implementation would store the last 200 or so steps of the computation, recomputing anything older than that on demand. The heuristic was that this was unnecessary most of the time. This is hardly useful is we want precise bounds on the amound of memory a Pixy program might use or how long it will take.}
+    This requires a heavily asynchronous mindset for which Lucid is a good starting point, since almost everything in Lucid is indeed asynchronous. This also requires avoiding the original Lucid implementation's reliance on indexed streams, since they worked based on a heuristic \cite[pages 67-68]{wadgeashcroft85} that would induce arbitrary recomputation in some cases. \footnote{The original implementation would store the last 200 or so steps of the computation, recomputing anything older than that on demand. The heuristic was that this was unnecessary most of the time. This is hardly useful if we want precise bounds on the amound of memory a Pixy program might use or how long it will take.}
     
     Our plan was to derive our own set of evaluation semantics for the language that was to become Pixy that were able to compute all the values for each timestep using bounded memory and time, and then to work on enforcing more and more correctness properties such as coinductive deadlock-freedom and custom invariants via a temporal type system.
     
@@ -95,7 +95,7 @@
 
     In principle, any Pixy expression with no free variables can be viewed as a self-contained program. Our current implementation reads a series of wheredecls and executes a main operator for the sake of ease of use.
     
-    You will notice that the grammar above contains <exprtuple>, which can be used to construct tuples. This is a work in progress and will described in any depth in the paper, but is expected to become part of the language in future work. Broadly speaking, tuples would be able to be constructed and manipulated as an extra data type. The only feature of not is that we expect that tuple literals will function as synchronisation points between streams during pre-delay calculations.
+    You will notice that the grammar above contains $\left<exprtuple \right>$, which can be used to construct tuples. This is a work in progress and will described in any depth in the paper, but is expected to become part of the language in future work. Broadly speaking, tuples would be able to be constructed and manipulated as an extra data type. The only feature of note is that we expect that tuple literals will function as synchronisation points between streams during pre-delay calculations.
     
     \subsection{From an end-user point of view}
     
@@ -304,7 +304,7 @@ x = if y % 2 == 0
     
     To begin with, we flatten out all operator calls via substitution. This is both to ensure that there is a clear bound on the time a Pixy expression can take to perform one time step and to simplify the formulation of any further stages.
     
-    We have an idea of how to deal with recursive operator application, but it is incomplete. Similar to [], we expect to reason about recursion depth using sized types. Specifically, we hope to generate upper and lower bounds for all operator arguments and enforce that the range of possible inputs to a recursive operator strictly decreases as recursion depth increases. Thus, we should be able to either generate a series of substitutions equivalent to the deepest recursion depth possible (terminating in an infinitely choked if branch) or reject an expression as ill-formed.
+    We have an idea of how to deal with recursive operator application, but it is incomplete. Similar to \cite{abel}, we expect to reason about recursion depth using sized types. Specifically, we hope to generate upper and lower bounds for all operator arguments and enforce that the range of possible inputs to a recursive operator strictly decreases as recursion depth increases. Thus, we should be able to either generate a series of substitutions equivalent to the deepest recursion depth possible (terminating in an infinitely choked if branch) or reject an expression as ill-formed.
     
     Our problem at the moment is that we do not have a precise enough representation of numbers in Pixy. While it is simple enough to calculate upper and lower bounds for an expression given its type, performing operations on these bounds requires a precise definition of numerical edge cases that we lack. We leave to future work excatly how to do this, but expect that once a more precise set of numerical semantics are derived the issue will be simpler.
     
@@ -967,5 +967,24 @@ end
     The closest alternative we imagine is Turing-incomplete synchronous recursion, also referred to as recursive operator application earlier in this document. This would allow processing batches of data in one timestep, but using a mechanism more similar to C++'s templates. All calls would be expanded at compile time and the maximum recursion depth would be checked in order to ensure that a deadline can be given and met for the completion of each program timestep.
     
     For truly infinite computation, the programmer would have to express it over multiple timesteps. This is reasonable, since Pixy specifically prioritises liveness and concurrency over expressiveness. It also encourages developers to think about the liveness of their systems - can the system afford to wait? What other components might be affected?
+    
+    \subsection{Pixy's representation and treatment of numbers}
+    
+    In order to reason precisely about the symbolic evaluation of Pixy terms we may need to revisit and refine Pixy's model of numbers. Since we assume any value in Pixy will have a bounded size, it becomes important to define precisely how different operations interact with this size. What happens if you add 1 to the largest number a variable could represent? For sized types as described in \cite{abel} to work we also need to reason about lower bounds - what happens if you inductively subtract 2 from an unknown value? How do we deal with the possibility of reaching $1-2$ while unfolding a recursive operator application?
+    
+    We suspect some of these issues will be clarified by implementing our planned explicit type system, but we can also see that the subtleties of some of these numerical edge cases may in turn inform what our type system should look like.
+    
+    \begin{thebibliography}{9}
+        \bibitem{abel}
+        Abel A.
+        \textit{MiniAgda: Integrating Sized and Dependent Types}
+        Department of Computer Science,
+        Ludwig-Maximilians-University Munich, Germany
+        \bibitem{wadgeashcroft85}
+        Wadge W. W.,
+        Ashcroft E. A.
+        \textit{Lucid, the Dataflow Programming Langugage}
+        Academic Press, 1985
+    \end{thebibliography}
     
 \end{document}
