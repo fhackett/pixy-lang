@@ -9,6 +9,9 @@ import Data.Foldable (traverse_)
 import Data.Semigroup ((<>))
 import Data.List (find)
 
+import qualified Data.Map.Strict as Map
+import qualified Data.Sequence as Seq
+
 import Pixy.Eval
 import Pixy.Delay
 import Pixy.Syntax
@@ -54,15 +57,13 @@ exec o = do
     case runParser program (file o) contents of
         Left err -> die err
         Right fs -> 
-            let (Just (Function _ _ mainF)) = find (\(Function n _ _) -> n == "main") fs
-            in
-                if dumpConstraints o then do
-                    let cs = genConstraints fs mainF
-                    putStrLn "--[Constraints]--"
-                    traverse_ print cs
-                    putStrLn "--[Reduced]--"
-                    -- either (\e -> printErr ("Constraint Error:\n" ++ pp e ++ "\n")) (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
-                else forM_ (go $ evalLoop fs mainF) display
+            if dumpConstraints o then do
+                let cs = genConstraints fs mainF
+                putStrLn "--[Constraints]--"
+                traverse_ print cs
+                putStrLn "--[Reduced]--"
+                -- either (\e -> printErr ("Constraint Error:\n" ++ pp e ++ "\n")) (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
+            else forM_ (go $ evalLoop fs mainF) display
     where go = case count o of
             Just n -> take n
             Nothing -> id
@@ -72,6 +73,9 @@ display :: Value ->  IO ()
 display (VInt k) = print k 
 display (VBool b) = print b
 display (VNil) = putStrLn "nil"
+
+mainF :: Expr
+mainF = Where (Var "main") [("main", (App "main" []))]
 
 showErr :: (Show e) => e -> IO ()
 showErr err = printErr $ show err ++ "\n"
