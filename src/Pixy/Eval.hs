@@ -59,6 +59,7 @@ data InitReaderState = InitReaderState
     { functions :: [Function]
     , fbyDepth :: Int
     , noDelayVars :: Set Var
+    , varDelays :: Map Var Int
     }
 
 data InitWriter = InitWriter 
@@ -73,7 +74,8 @@ init :: (MonadRWS InitReaderState InitWriter InitState m) => Expr -> m ExprS
 init = \case
     (Var x) -> do
         d <- getVarDepth x
-        writer (VarS x (d - 1), InitWriter (Map.singleton x d))
+        -- Need to subtract the variable delay!
+        trace (x ++ " needs buffer of size " ++ show d) writer (VarS x (d - 1), InitWriter (Map.singleton x d))
     (Const k) -> return $ ConstS k
     (If c t f) -> IfS <$> init c <*> init t <*> init f
     (Fby l r) -> FbyS False <$> init l <*> (addDepth 1 $ init r)
@@ -92,15 +94,23 @@ init = \case
     where
         initVar ::  (MonadRWS InitReaderState InitWriter InitState m) => (Var, Expr) -> m (Var, VarInfo)
         initVar (x,e) = do
-            d <- popDelay
+            Just d <- asks (Map.lookup x . varDelays)
             e' <- addDepth d (init e)
             return (x, VarInfo { varExpr = e', varDelay = d, varBuffer = Seq.singleton VNil })
+
+        getVarDelays :: (MonadRWS InitReaderState InitWriter InitState m) => [Var] -> m (Map Var Int)
+        getVarDelays vs = Map.fromList <$> traverse (\v -> (v,) <$> popDelay) vs
+
+        withVarDelays :: (MonadReader InitReaderState m) => Map Var Int -> m a -> m a
+        withVarDelays vm = local (\s -> s { varDelays = Map.union vm (varDelays s) })
+
 
         initWhere :: (MonadRWS InitReaderState InitWriter InitState m) => Expr -> [(Var, Expr)] -> m ExprS
         initWhere body bs = do
             depth <- asks fbyDepth
-            (vm, varSizes) <- listens bufferSizes $ Map.fromList <$> (addDepth (-depth) $ traverse initVar bs)
-            (body', bodySize) <- listens bufferSizes $ withNoDelay (Map.keysSet vm) $ init body
+            vd <- getVarDelays $ fmap fst bs
+            (vm, varSizes) <- listens bufferSizes $ withVarDelays vd $ Map.fromList <$> (addDepth (-depth) $ traverse initVar bs)
+            (body', bodySize) <- listens bufferSizes $ withVarDelays vd $ withNoDelay (Map.keysSet vm) $ init body
             let buffers = Map.unionWith max varSizes bodySize
             let definedSet = Set.fromList $ fst <$> bs
             let bs' = Map.merge Map.preserveMissing Map.dropMissing (Map.zipWithMatched (\_ vi n -> vi { varBuffer = mkBuffer n })) vm buffers
@@ -144,11 +154,12 @@ init = \case
 
         getVarDepth :: (MonadReader InitReaderState m) => Var -> m Int
         getVarDepth x = do
+            vd <- asks (fromMaybe (error $ "getVarDepth: no depth for variable " ++ x) . (Map.lookup x) . varDelays)
             vs <- asks noDelayVars
-            d <- asks fbyDepth
+            depth <- asks fbyDepth
             if x `Set.member` vs
-                then return (d + 1) 
-                else return d
+                then return (depth - vd + 1) 
+                else return (depth - vd)
 
 
         popDelay :: (MonadState InitState m) => m Int
@@ -159,9 +170,9 @@ init = \case
 
 runInit :: [Function] -> Expr -> ExprS
 runInit fs e = case genConstraints fs e of
-    Just cs -> fst $ evalRWS (init e) (initReaderState fs) (initState cs)
+    Just (c:cs) -> trace ("Main Delay" ++ show c) fst $ evalRWS (init e) (initReaderState c fs) (initState cs)
     where
-        initReaderState fs = InitReaderState { functions = fs, fbyDepth = 0, noDelayVars = Set.empty }
+        initReaderState d fs = InitReaderState { functions = fs, fbyDepth = d, noDelayVars = Set.empty, varDelays = Map.empty }
         initState cs = InitState { delayStack = cs }
 
 withBindings :: (MonadReader EvalState m) => Map Var VarInfo -> m a -> m a
@@ -307,5 +318,5 @@ evalLoop fs e =
     where
         loop :: ExprS -> [Value]
         loop s =
-            let (!s', !v) = trace (pp s) runReader (eval s) initEvalState
+            let (!s', !v) = runReader (eval s) initEvalState
             in v:loop s'

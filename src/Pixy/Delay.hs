@@ -133,7 +133,9 @@ constraints = \case
 genConstraints :: [Function] -> Expr -> Maybe [Int]
 genConstraints fs e = tryHead $ runFD $ do
     (mdelay, vars) <- runDelay (constraints e) fs
-    label vars
+    mVar <- new (Domain.range 0 Domain.sup)
+    mVar #== mdelay
+    label (mVar:vars)
     where
         tryHead :: [a] -> Maybe a
         tryHead (x:_) = Just x

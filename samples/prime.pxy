@@ -1,6 +1,8 @@
 main() = prime where {
     canidate = 5 fby (if (canidate % odds == 0 || odds * odds > canidate) then canidate + 2 else canidate)
     odds = 3 fby (if canidate % odds == 0 || odds * odds > canidate then 3 else odds + 2)
+    -- isPrime has a 2 cell buffer
     isPrime = if canidate % odds == 0 || odds * odds > canidate then (canidate % odds != 0) else nil
-    prime = 2 fby 3 fby (if ?isPrime && isPrime then canidate else nil)
+    -- isPrime indexes at [1]
+    prime = (if ?isPrime && isPrime then canidate else nil)
 }
