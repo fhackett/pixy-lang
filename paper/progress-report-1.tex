@@ -654,9 +654,9 @@ z where
     
     The syntax of one evaluation step looks like this: $\Gamma; S \vdash E \rightarrow V; S'$. Choke-evaluation has the same syntax, except that the relation is changed from $\rightarrow$ to $\ceval$.
     
-    $\Gamma$ represents a mapping of variable names to value, that is, the current scope.
+    $\Gamma$ represents a mapping of variable names to value, that is, the current scope. When resolving conflicts we assume the right-most element will be chosen.
     
-    $S$ represents the accumulated state associated with the current expression. It is important to note that the structure of state is strongly enforced: $(1, 2, 3)$ and $(1,(2, 3))$ are semantically different states, one being a tuple of three integers and the other being a 2-tuple of $1$ and $(2,3)$. When we pattern-match on state we rely on this property in order to avoid ambiguities and keep the states of different subexpression strictly separate.
+    $S$ represents the accumulated state associated with the current expression. It is important to note that the structure of state is strongly enforced: $(1, 2, 3)$ and $(1,(2, 3))$ are semantically different states, one being a tuple of three integers and the other being a 2-tuple of $1$ and $(2,3)$. Order also matters - it would be an error to initialise a state to $(1,2)$ and expect the pattern $(A, B)$ to match with $A=2, B=1$. When we pattern-match on state we rely on this property in order to avoid ambiguities and keep the states of different subexpression strictly separate.
     
     $E$ represents the current expression.
     
@@ -755,6 +755,8 @@ z where
         \item Recursively evaluating all their definitions, then their body (in that order)
         \item When choked, they only choke their body. The definitions are still evaluated as normal in order to avoid the state inside the where lagging behind the rest of the program.
     \end{enumerate}
+
+    We also ensure that we always append names to the right of $\Gamma$. This is so that when a variable is defined more than once the right-first lookup semantics will pick the most local definition.
     
     \begin{align*}
     \frac{
