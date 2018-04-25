@@ -939,7 +939,7 @@ z where
     of linear equations like $x * 2 = y$ and $max(x,y) > 4$. To solve this, we implemented a 
     simple constraint solver in Haskell, CLPHS (\url{https://github.com/TOTBWF/clphs}).
 
-    \subsubsection{Buffering}
+    \subsection{Buffering}
     Implementing buffering poses a few challenges. For efficiency reasons, we want to minimize data duplication.
     This means that having individual buffers for each variable reference is out of the question. Instead, we compute
     offsets for each variable reference, and use those to index into our buffers. For example, consider the code:
