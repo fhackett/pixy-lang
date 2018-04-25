@@ -109,8 +109,17 @@ init = \case
         initWhere body bs = do
             depth <- asks fbyDepth
             vd <- getVarDelays $ fmap fst bs
-            (vm, varSizes) <- listens bufferSizes $ withVarDelays vd $ Map.fromList <$> (addDepth (-depth) $ traverse initVar bs)
-            (body', bodySize) <- listens bufferSizes $ withVarDelays vd $ withNoDelay (Map.keysSet vm) $ init body
+            (vm, varSizes) <- 
+                listens bufferSizes 
+                $ withVarDelays vd 
+                $ Map.fromList 
+                <$> (addDepth (-depth) 
+                $ traverse initVar bs)
+            (body', bodySize) <- 
+                listens bufferSizes 
+                $ withVarDelays vd 
+                $ withNoDelay (Map.keysSet vm) 
+                $ init body
             let buffers = Map.unionWith max varSizes bodySize
             let definedSet = Set.fromList $ fst <$> bs
             let bs' = Map.merge Map.preserveMissing Map.dropMissing (Map.zipWithMatched (\_ vi n -> vi { varBuffer = mkBuffer n })) vm buffers
@@ -154,7 +163,7 @@ init = \case
 
         getVarDepth :: (MonadReader InitReaderState m) => Var -> m Int
         getVarDepth x = do
-            vd <- asks (fromMaybe (error $ "getVarDepth: no depth for variable " ++ x) . (Map.lookup x) . varDelays)
+            vd <- asks (fromMaybe 0 . (Map.lookup x) . varDelays)
             vs <- asks noDelayVars
             depth <- asks fbyDepth
             if x `Set.member` vs
