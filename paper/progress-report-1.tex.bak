@@ -44,11 +44,11 @@
     
     Our initial goal was to adapt the Lucid programming language to have first-class support for real-time programming, while retaining its nature as a general purpose language.
     
-    This means a few things: every step of computation must be able to meet a deadline, unrelated parts of a program must not be able to interfere with each others' timing and ideally even related parts of a program must never stop each other.
+    This means a few things: every step of computation must be able to meet a deadline, unrelated parts of a program must not be able to interfere with each other's timing and ideally even related parts of a program must never stop each other.
     
-    This requires a heavily asynchronous mindset for which Lucid is a good starting point, since almost everything in Lucid is indeed asynchronous. This also requires avoiding the original Lucid implementation's reliance on indexed streams, since they worked based on a heuristic \cite[pages 67-68]{wadgeashcroft85} that would induce arbitrary recomputation in some cases. \footnote{The original implementation would store the last 200 or so steps of the computation, recomputing anything older than that on demand. The heuristic was that this was unnecessary most of the time. This is hardly useful if we want precise bounds on the amount of memory a Pixy program might use or how long it will take.}
+    This requires a heavily asynchronous mindset for which Lucid is a good starting point, since almost everything in Lucid is indeed asynchronous. This also requires avoiding the original Lucid implementation's reliance on indexed streams, since they worked based on a heuristic \cite[pages 67-68]{wadgeashcroft85} that would induce arbitrary recomputation in some cases. \footnote{The original implementation would store the last 200 or so steps of the computation, recomputing anything older than that on demand. The heuristic was that this was unnecessary most of the time. This is hardly useful if we want precise bounds on the amound of memory a Pixy program might use or how long it will take.}
     
-    Our plan was to derive our own set of evaluation semantics for the language that was to become Pixy that were able to compute all the values for each timestep using bounded memory and time, and then to work on enforcing more and more correctness properties such as co-inductive deadlock-freedom and custom invariants via a temporal type system.
+    Our plan was to derive our own set of evaluation semantics for the language that was to become Pixy that were able to compute all the values for each timestep using bounded memory and time, and then to work on enforcing more and more correctness properties such as coinductive deadlock-freedom and custom invariants via a temporal type system.
     
     Our progress so far is that we have designed Pixy' evaluation semantics from the ground up to operate using a fixed amount of state and compute every timestep within an arbitrary but constant deadline.
     
@@ -153,7 +153,7 @@ x = 1 fby 2 fby 3 fby x
 x = 1 fby 1 fby (x+ next x)
     \end{lstlisting}
     
-    In this case, the expression $x$ yields the sequence $1, 1, 2, 3, 5 ...$, or the Fibonacci sequence.
+    In this case, the expression $x$ yields the sequence $1, 1, 2, 3, 5 ...$, or the Fibonnacci sequence.
     
     The intuition to how this works is to consider $x$ to yield the "first element" of the stream and $\nextop x$ to yield the "second element". So, initially both are $1$, then as we move forward in time we have $1, 2$, and so forth. $x + \nextop x$ simply calculates the sum of these two values going forward in time.
     
@@ -231,7 +231,7 @@ y = 1 fby y + 1
 x = if y % 2 == 0 then y else 0
     \end{lstlisting}
     
-    This will unsurprisingly cause the expression $x$ to yield the sequence $0, 2, 0, 4, 0, 6 ...$.
+    This will unsurprisingy cause the expression $x$ to yield the sequence $0, 2, 0, 4, 0, 6 ...$.
     
     The intuition that the condition is evaluated, then based on the result one of the two branches is returned is largely correct.
     
@@ -298,7 +298,7 @@ x = if y % 2 == 0
     
     The second stage is the allocation of initial state for all builtin operators. This stage has two subsections, namely state allocation and delay compensation.
     
-    The last stage is the evaluation derivations themselves, which operate on the modified AST and initial state defined in the prior stages. This stage models the life cycle of the program using what can be considered both small- and big-step semantics depending on your point of view. If you consider the program's entire lifespan, then we express that in a series of small steps. If you consider one step, we provide big-step semantics for analysing one single step. To avoid confusion, we will notate evaluation using $\rightarrow$.
+    The last stage is the evaluation derivations themselves, which operate on the modified AST and initial state defined in the prior stages. This stage models the lifecycle of the program using what can be considered both small- and big-step semantics depending on your point of view. If you consider the program's entire lifespan, then we express that in a series of small steps. If you consider one step, we provide big-step semantics for analysing one single step. To avoid confusion, we will notate evaluation using $\rightarrow$.
     
     \subsubsection{Operator calls}
     
@@ -306,7 +306,7 @@ x = if y % 2 == 0
     
     We have an idea of how to deal with recursive operator application, but it is incomplete. Similar to \cite{abel}, we expect to reason about recursion depth using sized types. Specifically, we hope to generate upper and lower bounds for all operator arguments and enforce that the range of possible inputs to a recursive operator strictly decreases as recursion depth increases. Thus, we should be able to either generate a series of substitutions equivalent to the deepest recursion depth possible (terminating in an infinitely choked if branch) or reject an expression as ill-formed.
     
-    Our problem at the moment is that we do not have a precise enough representation of numbers in Pixy. While it is simple enough to calculate upper and lower bounds for an expression given its type, performing operations on these bounds requires a precise definition of numerical edge cases that we lack. We leave to future work exactly how to do this, but expect that once a more precise set of numerical semantics are derived the issue will be simpler.
+    Our problem at the moment is that we do not have a precise enough representation of numbers in Pixy. While it is simple enough to calculate upper and lower bounds for an expression given its type, performing operations on these bounds requires a precise definition of numerical edge cases that we lack. We leave to future work excatly how to do this, but expect that once a more precise set of numerical semantics are derived the issue will be simpler.
     
     For the simple case where we assume no recursion occurs, operator call flattening can be expressed using the syntax $\Gamma \vdash E \flattenrel E'$ where $\Gamma$ represents the current scope, $E$ represents the initial expression and $E'$ represents the modified result with no operator calls.
     
@@ -937,7 +937,7 @@ z where
     
     As we worked more on the language, we discovered that Pixy is not very powerful compared to most languages. In its current form it isn't even Turing complete.
     
-    While on its own this can be seen as a weakness in the language, we noticed at the same time that due to its fully static control flow Pixy can be used to describe algorithms that would work on more unusual platforms such as field programmable gate arrays - since it derives from Lucid, which had both a text and a diagram representation, and removes most of Lucid's dynamism, Pixy should be able to express algorithms targeted at the lowest common denominator of computation: digital circuits. Since we also envisage interesting implementation strategies for commodity hardware, once we build a better base for the language it may be interesting to investigate what happens if you apply Pixy to circuit design.
+    While on its own this can be seen as a weakness in the language, we noticed at the same time that due to its fully static control flow Pixy can be used to describe algorithms that would work on more unusual platforms such as field programmable gate arrays - since it derives from Lucid, which had both a text and a diagram representation, and removes most of Lucid's dynamicism, Pixy should be able to express algorithms targeted at the lowest common denominator of computation: digital circuits. Since we also envisage interesting implementation strategies for commodity hardware, once we build a better base for the language it may be interesting to investigate what happens if you apply Pixy to circuit design.
     
     \subsection{State of the type system(s)}
     
