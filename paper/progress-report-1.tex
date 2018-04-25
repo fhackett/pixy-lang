@@ -927,8 +927,32 @@ z where
     
     \section{Implementation}
     
-    TODO
-    
+    The implementation of Pixy presents a few specific challenges. For starters, 
+    to be able to determine the delays of variables, you need to be able to 
+    solve what amounts to a constraint solving problem. On top of that, you
+    have to be able to properly line up the buffers, and ensure that all access happen seamlessly.
+
+    \subsection{Constraint Solving}
+    The constraint problem at hand is in the domain of Linear Integeger Arithmetic. This consists
+    of linear equations like $x * 2 = y$ and $max(x,y) > 4$. To solve this, we implemented a 
+    simple constraint solver in Haskell, CLPHS (\url{https://github.com/TOTBWF/clphs}).
+
+    \subsubsection{Buffering}
+    Implementing buffering poses a few challenges. For efficiency reasons, we want to minimize data duplication.
+    This means that having individual buffers for each variable reference is out of the question. Instead, we compute
+    offsets for each variable reference, and use those to index into our buffers. For example, consider the code:
+    \begin{lstlisting}
+        fib = 0 fby 1 fby (fib + next fib)
+    \end{lstlisting}
+    \lstinline{fib} must have a 2-cell buffer, references access it at 2 distinct points in time.
+
+    % The algorithm for computing the offsets is as follows: First, traverse the tree, 
+    % building and 
+
+
+
+
+
     \section{Comments and future work}
     
     There is clearly a lot more to be done to the language. At the evaluation level we need to properly refine recursive operator application, and most of our ideas for a type system are discussed but not fully explored. While we have described some of these ideas inline, here we will present a set of possible future directions and our thoughts on them.
