@@ -7,6 +7,7 @@ import System.Console.ANSI
 import Options.Applicative
 import Data.Foldable (traverse_)
 import Data.Semigroup ((<>))
+import Data.List (find)
 
 import Pixy.Eval
 import Pixy.Delay
@@ -53,13 +54,15 @@ exec o = do
     case runParser program (file o) contents of
         Left err -> die err
         Right fs -> 
-            if dumpConstraints o then do
-                let cs = genConstraints fs (App "main" [])
-                putStrLn "--[Constraints]--"
-                traverse_ print cs
-                putStrLn "--[Reduced]--"
-                -- either (\e -> printErr ("Constraint Error:\n" ++ pp e ++ "\n")) (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
-            else forM_ (go $ evalLoop fs (App "main" [])) display
+            let (Just (Function _ _ mainF)) = find (\(Function n _ _) -> n == "main") fs
+            in
+                if dumpConstraints o then do
+                    let cs = genConstraints fs mainF
+                    putStrLn "--[Constraints]--"
+                    traverse_ print cs
+                    putStrLn "--[Reduced]--"
+                    -- either (\e -> printErr ("Constraint Error:\n" ++ pp e ++ "\n")) (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
+                else forM_ (go $ evalLoop fs mainF) display
     where go = case count o of
             Just n -> take n
             Nothing -> id

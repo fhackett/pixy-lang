@@ -124,7 +124,7 @@ constraints = \case
             tell [retDelay]
             let vargs = Map.fromList $ zip argnames args
             bodyDelay <- local (\s -> s { varDelays = vargs, whereVars = argnames}) (constraints body)
-            lift $ lift $ retDelay #== bodyDelay
+            lift $ lift $ retDelay #== (bodyDelay - cmax args)
             return bodyDelay
 
 genConstraints :: [Function] -> Expr -> Maybe [Int]

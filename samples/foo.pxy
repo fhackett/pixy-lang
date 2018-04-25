@@ -1,6 +1,6 @@
-foo(a) = a + next a
+foo(a) = next a + next a
 
 main() = y where {
-    x = 0 fby (x + 1)
-    y = foo(1)
+    x = 1 fby (x + 1)
+    y = foo(next x)
 }
