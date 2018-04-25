@@ -108,7 +108,7 @@ constraints = \case
             tell vars
             let (vs, es) = unzip ve
             let delays = Map.fromList $ zip vs vars
-            local (\s -> s { varDelays = Map.union delays (varDelays s) }) (f $ zip vars es)
+            local (\s -> s { varDelays = Map.union delays (varDelays s) }) (f (zip vars es))
 
         whereConstraints :: (FDExpr s, Expr) -> Delay s ()
         whereConstraints (v, e) = do
@@ -124,7 +124,10 @@ constraints = \case
             tell [retDelay]
             let vargs = Map.fromList $ zip argnames args
             bodyDelay <- local (\s -> s { varDelays = vargs, whereVars = argnames}) (constraints body)
-            lift $ lift $ retDelay #== (bodyDelay - cmax args)
+            let argMax = case args of
+                    [] -> 0
+                    _ -> cmax args
+            lift $ lift $ retDelay #== (bodyDelay - argMax)
             return bodyDelay
 
 genConstraints :: [Function] -> Expr -> Maybe [Int]

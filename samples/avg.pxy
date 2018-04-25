@@ -1,8 +1,8 @@
 avg(x) = sum/count where {
     sum = x fby (sum + x)
-    count = 1 fby count + 1
+    count = 1 fby (count + 1)
 }
 
-main() = avg(n) where {
+main() = avg(next n) where {
     n = 2 fby (n + 2)
 }
