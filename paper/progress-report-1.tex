@@ -42,15 +42,15 @@
     
     \section{Introduction}
     
-    //TODO what are the desired properties?
-    
-    // coinductive properties? what is correctness?
-    
     Our initial goal was to adapt the Lucid programming language to have first-class support for realtime programming, while retaining its nature as a general purpose language.
     
-    Specifically, we were looking for a language with asynchronous semantics such that no one part of a program necessarily has to block the other. Then, we are looking for ways to ensure that programs expressed written in Pixy progress coinductively over time.
+    This means a few things: every step of computation must be able to meet a deadline, unrelated parts of a program must not be able to interfere with each other's timing and ideally even related parts of a program must never stop each other.
     
-    Our progress so far is that we have redesigned the language's evaluation semantics from the ground up to create Pixy, a language that shares a lot of syntax and surface-level semantics with Lucid. Pixy is however at its core a very different language.
+    This requires a heavily asynchronous mindset for which Lucid is a good starting point, since almost everything in Lucid is indeed asynchronous. This also requires avoiding the original Lucid implementation's reliance on indexed streams, since they worked based on a heuristic that would induce arbitrary recomputation in some cases. \footnote{The original implementation would store the last 200 or so steps of the computation, recomputing anything older than that on demand. The heuristic was that this was unnecessary most of the time. This is hardly useful is we want precise bounds on the amound of memory a Pixy program might use or how long it will take.}
+    
+    Our plan was to derive our own set of evaluation semantics for the language that was to become Pixy that were able to compute all the values for each timestep using bounded memory and time, and then to work on enforcing more and more correctness properties such as coinductive deadlock-freedom and custom invariants via a temporal type system.
+    
+    Our progress so far is that we have designed Pixy' evaluation semantics from the ground up to operate using a fixed amount of state and compute every timestep within an arbitrary but constant deadline.
     
     \section{Pixy's programming model}
     
@@ -87,17 +87,15 @@
         <varlist> ::= <var> "," <varlist> | <var>
         
         <wheredecl> ::= <var> "=" <expr> 
-        \alt <var> "(" <varlist> ")" "=" <expr> "// TODO custom operator definition <<"
+        \alt <var> "(" <varlist> ")" "=" <expr>
         \alt "(" <varlist> ( "|" <var> )? ")" "=" <expr>
         
         <wheredecls> ::= <wheredecl> ";" <wheredecls> | <wheredecl>
     \end{grammar}
 
-    TODO: example here maybe?
-
     In principle, any Pixy expression with no free variables can be viewed as a self-contained program. Our current implementation reads a series of wheredecls and executes a main operator for the sake of ease of use.
     
-    We support 3 common datatypes: booleans, natural numbers and tuples.
+    You will notice that the grammar above contains <exprtuple>, which can be used to construct tuples. This is a work in progress and will described in any depth in the paper, but is expected to become part of the language in future work. Broadly speaking, tuples would be able to be constructed and manipulated as an extra data type. The only feature of not is that we expect that tuple literals will function as synchronisation points between streams during pre-delay calculations.
     
     \subsection{From an end-user point of view}
     
@@ -294,19 +292,19 @@ x = if y % 2 == 0
     
     \subsection{Operational semantics}
     
-    Pixy's operational semantics have several stages in order to keep memory allocation and analysis distinct from the actual evaluation steps. This helps keep evaluation simple and allows us to prove quite trivially that for every timestep a Pixy program will perform a bounded amount of computation. We chose to avoid time-indexed computation in order to stay in keeping with the idea that a Pixy program only needs its immediate state in order to keep functioning - that is to say, a Pixy program could in theory be coinductively verified to remain correct and on time, and will run using a well-defined finite amount of memory.
+    Pixy's operational semantics have several stages in order to keep memory allocation and analysis distinct from the actual evaluation steps. This helps keep evaluation simple and allows us to prove quite trivially that for every timestep a Pixy program will perform a bounded amount of computation. We chose to avoid time-indexed computation in order to stay in keeping with the idea that a Pixy program only needs its immediate state in order to keep functioning - that is to say, a Pixy program could in theory be coinductively verified to remain correct and on time by symbolically evaluating reachable states, and will run using a well-defined finite amount of memory.
     
     The first stage is used to flatten out any operator calls. Since recursive operator calls could lead to unbounded memory usage during evaluation, Pixy requires all operator calls including recursive ones to be flattened out before evaluation. In order to predict the maximum possible recursion depth and allocate memory for it ahead of time, we use a technique based on sized types.
     
     The second stage is the allocation of initial state for all builtin operators. This stage has two subsections, namely state allocation and delay compensation.
     
-    The last stage is the evaluation derivations themselves, which operate on the modified AST and initial state defined in the prior stages. This stage models the lifecycle of the program using what can be considered both small- and big-step semantics depending on your point of view. If you consider the program's entire lifespan, then we express that in a series of small steps. If you consider one step, we provide big-step semantics for analysing one single step.
+    The last stage is the evaluation derivations themselves, which operate on the modified AST and initial state defined in the prior stages. This stage models the lifecycle of the program using what can be considered both small- and big-step semantics depending on your point of view. If you consider the program's entire lifespan, then we express that in a series of small steps. If you consider one step, we provide big-step semantics for analysing one single step. To avoid confusion, we will notate evaluation using $\rightarrow$.
     
     \subsubsection{Operator calls}
     
     To begin with, we flatten out all operator calls via substitution. This is both to ensure that there is a clear bound on the time a Pixy expression can take to perform one time step and to simplify the formulation of any further stages.
     
-    We have an idea of how to deal with recursive operator application, but it is incomplete. Similar to [], we expect to reason about recursion depth using sized types. Specifically, we hope to generate upper and lower bounds for all operator arguments and enforce that the range of possible inputs to a recursive operator strictly decreases as recursion depth increases. Thus, we should be able to either generate a series of substitutions equivalent to the deepest recursion depth possible or reject an expression as ill-formed.
+    We have an idea of how to deal with recursive operator application, but it is incomplete. Similar to [], we expect to reason about recursion depth using sized types. Specifically, we hope to generate upper and lower bounds for all operator arguments and enforce that the range of possible inputs to a recursive operator strictly decreases as recursion depth increases. Thus, we should be able to either generate a series of substitutions equivalent to the deepest recursion depth possible (terminating in an infinitely choked if branch) or reject an expression as ill-formed.
     
     Our problem at the moment is that we do not have a precise enough representation of numbers in Pixy. While it is simple enough to calculate upper and lower bounds for an expression given its type, performing operations on these bounds requires a precise definition of numerical edge cases that we lack. We leave to future work excatly how to do this, but expect that once a more precise set of numerical semantics are derived the issue will be simpler.
     
@@ -392,8 +390,6 @@ x = if y % 2 == 0
 x = 1
 y = x + next x
     \end{lstlisting}
-    
-    TODO: why don't we need to index time? because induction
     
     Following a naive reading of the evaluation semantics, at $t_1$ $x$ will be 1, and when computing $y$ we will take 1 and try to add it to $\nextop x$, which dropped the value $1$ and is equal to $nil$ in this case. This is counter-intuitive since $x + \nextop x$ looks like it means "wait for $\nextop x$" then add $x$ to it. When considering this issue we found that it was possible to reimplement the intuitive interpretation using implicit buffering, or delay compensation.
     
@@ -488,7 +484,7 @@ if ?x then (x+x) + next x else 1
     
     \paragraph{Conditionals}
     
-    If statements also require delay compensation, this time across 3 different operands. Otherwise, we just recursively allocate space for the operands as usual.
+    If statements also require delay compensation, this time across 3 different operands. Otherwise, we just recursively allocate space for the conditional and two branches.
     
     \begin{align*}
     \frac{
@@ -947,7 +943,9 @@ z where
     
     Current discussion places Pixy type system as 2-dimensional along the data and control axes. On the one hand we envisage a traditional type system similar to that used in typical functional programming languages that would be used to make sure basic data is coherent across all program timesteps, and on the other we hope to experiment with a temporal logic-based system that tries to reason about tricky corner cases and synchronisation problems that span multiple timesteps.
     
-    Part of our work on synchronising pre-delays might be generalisable to become a part of the temporal type system, and can already catch some basic programming errors.
+    Part of our work on synchronising pre-delays might be generalisable to become a part of the temporal type system, and can already catch some basic programming errors such as leaving "gaps" in between the left and right operand of a fby.
+    
+    One strategy we have in mind for implementing the temporal logic system is coinductive symbolic evaluation across different possible program states, taking advantage of the finite state space we describe in the init phase in order to argue termination of the checking process.
     
     \subsection{Expressing iteration}
     
