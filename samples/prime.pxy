@@ -1,8 +1,8 @@
 div(c,o) = c % o == 0 || o * o > c
 
 main() = prime where {
-    canidate = 5 fby (if div(canidate, odds) then canidate + 2 else canidate)
-    odds = 3 fby (if div(canidate, odds) then 3 else odds + 2)
-    isPrime = if div(canidate, odds) then (canidate % odds != 0) else nil
-    prime = 2 fby 3 fby (if ?isPrime && isPrime then canidate else nil)
+    candidate = 5 fby (if div(candidate, odds) then candidate + 2 else candidate)
+    odds = 3 fby (if div(candidate, odds) then 3 else odds + 2)
+    isPrime = if div(candidate, odds) then (candidate % odds != 0) else nil
+    prime = 2 fby 3 fby (if ?isPrime && isPrime then candidate else nil)
 }
