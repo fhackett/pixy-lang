@@ -46,7 +46,7 @@
     
     This means a few things: every step of computation must be able to meet a deadline, unrelated parts of a program must not be able to interfere with each others' timing and ideally even related parts of a program must never stop each other.
     
-    This requires a heavily asynchronous mindset for which Lucid is a good starting point, since almost everything in Lucid is indeed asynchronous. This also requires avoiding the original Lucid implementation's reliance on indexed streams, since they worked based on a heuristic \cite[pages 67-68]{wadgeashcroft85} that would induce arbitrary recomputation in some cases. \footnote{The original implementation would store the last 200 or so steps of the computation, recomputing anything older than that on demand. The heuristic was that this was unnecessary most of the time. This is hardly useful if we want precise bounds on the amount of memory a Pixy program might use or how long it will take.}
+    This requires a heavily asynchronous mindset for which Lucid is a good starting point, since almost everything in Lucid is indeed asynchronous. It also requires avoiding the original Lucid implementation's reliance on indexed streams, since they worked based on a heuristic \cite[pages 67-68]{wadgeashcroft85} that would induce arbitrary recomputation in some cases. \footnote{The original implementation would store the last 200 or so steps of the computation, recomputing anything older than that on demand. The heuristic was that this was unnecessary most of the time. This is hardly useful if we want precise bounds on the amount of memory a Pixy program might use or how long it will take.}
     
     Our plan was to derive our own set of evaluation semantics for the language that was to become Pixy that were able to compute all the values for each timestep using bounded memory and time, and then to work on enforcing more and more correctness properties such as co-inductive deadlock-freedom and custom invariants via a temporal type system.
     
@@ -1022,7 +1022,7 @@ main() = avg(n) where {
     
     \subsection{State of the type system(s)}
     
-    Current discussion places Pixy type system as 2-dimensional along the data and control axes. On the one hand we envisage a traditional type system similar to that used in typical functional programming languages that would be used to make sure basic data is coherent across all program timesteps, and on the other we hope to experiment with a temporal logic-based system that tries to reason about tricky corner cases and synchronisation problems that span multiple timesteps.
+    Current discussion places Pixy type system as 2-dimensional along the data and control axes. On the one hand we envisage a traditional type system similar to that used in typical functional programming languages that would be used to make sure basic data is coherent across all program timesteps, and on the other we hope to experiment with a temporal logic-based \cite{ltlwiki} system that tries to reason about tricky corner cases and synchronisation problems that span multiple timesteps.
     
     Part of our work on synchronising pre-delays might be generalisable to become a part of the temporal type system, and can already catch some basic programming errors such as leaving "gaps" in between the left and right operand of a fby.
     
@@ -1057,7 +1057,7 @@ end
     
     \section{Conclusion}
     
-    While working on the formal description of the language and the implementation, we found that generating a formal description of a new language required a large amount of effort to go into understanding that language. We initially expected to be able to quickly describe Pixy's evaluation process then move on to devising a type system, but repeatedly discovered that we did not truly understand all of the ramifications of Pixy's design choices.
+    While working on the formal description of the language and the implementation, we found that generating a formal description of a new language required a large amount of effort to go into understanding that language. We initially expected to be able to quickly describe Pixy's evaluation process then move on to devising a type system, but repeatedly discovered that we did not truly understand all of the ramifications of Pixy's semantics.
     
     While a naive set of dynamic semantics for dataflow languages is not that hard to produce, reasoning about exactly what values need to be buffered due to (sometimes indirect) lookaheads and what can be safely discarded proved one of the biggest challenges. Our major breakthrough in this area turned out to be separating the very hard problem of the general-purpose synchronisation of heterogenously timed streams from the more tractable problem of ensuring that each state machine was receiving values that came from the same timestep by calculating correct pre-delays.
     
@@ -1078,6 +1078,10 @@ end
         Ashcroft E. A.
         \textit{Lucid, the Dataflow Programming Langugage}
         Academic Press, 1985
+        \bibitem{ltlwiki}
+        Wikipedia
+        \textit{Linear temporal logic}
+        \url{https://en.wikipedia.org/wiki/Linear_temporal_logic}, accessed 2018/04/25        
     \end{thebibliography}
     
 \end{document}
