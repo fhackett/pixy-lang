@@ -685,7 +685,7 @@ z where
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma; S_c \vdash C \rightarrow true; S_c' \\
+        \Gamma; S_c \vdash C \rightarrow false; S_c' \\
         \Gamma; S_t \vdash T \ceval nil; S_t' \\
         \Gamma; S_f \vdash F \rightarrow V; S_f' \\
         \end{matrix}
@@ -812,7 +812,7 @@ z where
     
     Evaluating fby has some extra requirements compared to other operators. One one hand, it operates as a latch waiting for one value from $A$ then choking $A$ and exclusively forwarding values from $B$. On the other hand, it buffers values from $B$ while waiting for the first value from $A$ as well as when dealing with its backlog of values from $B$ after it is done waiting for $A$.
     
-    Here we use $\buffer$ to represent cycling the fby's buffer $b$. The semantics of this operation are the same as when buffering identifier values - the buffer is assumed to start full of $nil$ values, and the buffer acts like a queue. As you may notice in fby-A, the expectation is that the buffer is large enough to not run out of $nil$ values before switching to fby-B. It is an error in the init stage for this not to be the case.
+    Here we use $\buffer(b, V_b) = b', V$ to represent pushing $V_b$ onto $b$ then popping $V$ from $b$, resulting in the upated queue $b'$. The semantics of this operation are the same as when buffering identifier values - the buffer is assumed to start full of $nil$ values, and the buffer acts like a queue. As you may notice in fby-A, the only correct value that can be popped from $b$ at that stage is $nil$. The expectation is that the buffer is large enough to not run out of $nil$ values before switching to fby-B. This property must be guaranteed by a correct implementation of the init stage.
     
     \begin{align*}
     \frac{
@@ -828,7 +828,7 @@ z where
     
     In fby-A you will notice that the first element of that state is pattern-matched to be $false$. This means the fby expression is still waiting for the first value from $A$. Correspondingly, the new value for that part of the state is whether a value was received from $A$, or $V_a \neq nil$. When that becomes true, that part of the state will be latched to $true$ and future evaluations will use fby-B instead.
     
-    In fby-B, we continue cycling the buffer with new values from $B$. The difference here is that the buffer functions purely as a delay with constant size - the deadline for receiving a value from $A$ was the only thing requiring it to be a certain size so now we just forward whatever comes out of the buffer.
+    In fby-B, we continue cycling the buffer with new values from $B$. The difference here is that the buffer functions act purely as a delay with constant size - the deadline for receiving a value from $A$ was the only thing requiring it to be a certain size so now we just forward whatever comes out of the buffer.
     
     \begin{align*}
     \frac{
@@ -907,7 +907,7 @@ z where
     
     Identifiers are both in charge of looking up the value pointed to by $I$ and buffering it by the appropriate amount. This is so that any downstream operators receive correctly synchronised values - ensuring the buffers are the correct size is one of the main responsibilities of the init phase.
     
-    As elsewhere, $\buffer$ is a shorthand for cycling the contents of the buffer $b$ - $b$ acts as a queue that is initially full of $nil$ values, causing a delay as long as the buffer in the values yielded by this expression compared to the actual timing of the values at $\Gamma(I)$.
+    As elsewhere, $\buffer(b, V) = b', V_b$ is a shorthand for pushing $V$ onto $b$ and popping $V_b$ from the from of $b$, producing a new queue $b'$. $b$ acts as a queue that is initially full of $nil$ values, causing a delay as long as the buffer in the values yielded by this expression compared to the actual timing of the values at $\Gamma(I)$. 
     
     \begin{align*}
     \frac{
@@ -967,6 +967,48 @@ z where
 - can the system afford to wait? What other components might be affected?
     It is worth noting that while the algorithm is simple in concept a lot of care needs to go into correctly calculating and combining variable delays - this algorithm is heavily context-based. That said, we have achieved decent results on our test cases with this setup.
 
+    \subsection{Test cases}
+    
+    We have a suite of runnable test cases available at (\url{https://github.com/fhackett/pixy-lang/tree/master/samples}).
+    
+    \subsubsection{Prime sieve}
+    
+    Our most complex example is a naive constant-memory implementation of Erastothenes' prime sieve:
+    
+    \begin{lstlisting}
+div(c,o) = c % o == 0 || o * o > c
+
+main() = prime where {
+    candidate =
+        5 fby (if div(candidate, odds) then
+            candidate + 2 else candidate)
+    odds =
+        3 fby (if div(candidate, odds) then 3 else odds + 2)
+    isPrime =
+        if div(candidate, odds) then
+            (candidate % odds != 0) else nil
+    prime =
+        2 fby 3 fby (if ?isPrime && isPrime then
+            candidate else nil)
+}
+    \end{lstlisting}
+    
+    Notably, while it will not always provide an answer at every timestep the algorithm will report either a result or $nil$ in constant time every step. This means that if this algorithm were used as part of a larger program it would not slow down the rest of the program's execution over time, unlike a naive imperative or functional implementation of the same program.
+    
+    \subsubsection{Running average}
+    
+    We also provide a running average calculation that exercises Pixy's stateful custom operators. For any stream consisting of numbers, $avg(n)$ will yield a correct running average at every timestep. Here we show how it can be applied to a sequence of increasing even numbers.
+    
+    \begin{lstlisting}
+avg(x) = sum/count where {
+    sum = x fby (sum + next x)
+    count = 1 fby (count + 1)
+}
+
+main() = avg(n) where {
+    n = 2 fby (n + 2)
+}
+    \end{lstlisting}
 
     \section{Comments and future work}
     
@@ -1012,6 +1054,18 @@ end
     In order to reason precisely about the symbolic evaluation of Pixy terms we may need to revisit and refine Pixy's model of numbers. Since we assume any value in Pixy will have a bounded size, it becomes important to define precisely how different operations interact with this size. What happens if you add 1 to the largest number a variable could represent? For sized types as described in \cite{abel} to work we also need to reason about lower bounds - what happens if you inductively subtract 2 from an unknown value? How do we deal with the possibility of reaching $1-2$ while unfolding a recursive operator application?
     
     We suspect some of these issues will be clarified by implementing our planned explicit type system, but we can also see that the subtleties of some of these numerical edge cases may in turn inform what our type system should look like.
+    
+    \section{Conclusion}
+    
+    While working on the formal description of the language and the implementation, we found that generating a formal description of a new language required a large amount of effort to go into understanding that language. We initially expected to be able to quickly describe Pixy's evaluation process then move on to devising a type system, but repeatedly discovered that we did not truly understand all of the ramifications of Pixy's design choices.
+    
+    While a naive set of dynamic semantics for dataflow languages is not that hard to produce, reasoning about exactly what values need to be buffered due to (sometimes indirect) lookaheads and what can be safely discarded proved one of the biggest challenges. Our major breakthrough in this area turned out to be separating the very hard problem of the general-purpose synchronisation of heterogenously timed streams from the more tractable problem of ensuring that each state machine was receiving values that came from the same timestep by calculating correct pre-delays.
+    
+    The other major discovery we made was choke-evaluation. We had not properly considered the issue until we ran into examples where fully evaluating a non-taken branch of an if statement would lead to an error at the same time as finding examples where skipping non-taken if branches was also incorrect. Trying to reconcile the two lead to some interesting discussions on what would be the semantically correct option, and we went through several alternatives before arriving at choke-evaluation.
+    
+    Overall, the back and forth of designing and implementing a new programming language while constantly discovering new issues with both the implementation and theory has been educational. We've gained a lot of experience in writing out a consistent formal description of a language, and we've gained a much better appreciation for what it takes to get from a basic concept to a working theory.
+    
+    Going forward we hope to follow up on the future work we identified and continue learning more about what it takes to make the general idea of Pixy work in reality.
     
     \begin{thebibliography}{9}
         \bibitem{abel}
