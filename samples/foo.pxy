@@ -1,5 +1,3 @@
-id(x) = x + x
-
-main() = id(y) where {
+main() = y where {
     y = 1 fby (y + 1)
 }
