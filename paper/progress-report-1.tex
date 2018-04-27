@@ -42,11 +42,11 @@
     
     \section{Introduction}
     
-    Our initial goal was to adapt the Lucid programming language to have first-class support for real-time programming, while retaining its nature as a general purpose language.
+    Our initial goal was to adapt the Lucid programming language to have first-class support for real-time programming\cite{bencina}, while retaining its nature as a general purpose language.
     
     This means a few things: every step of computation must be able to meet a deadline, unrelated parts of a program must not be able to interfere with each others' timing and ideally even related parts of a program must never stop each other.
     
-    This requires a heavily asynchronous mindset for which Lucid is a good starting point, since almost everything in Lucid is indeed asynchronous. This also requires avoiding the original Lucid implementation's reliance on indexed streams, since they worked based on a heuristic \cite[pages 67-68]{wadgeashcroft85} that would induce arbitrary recomputation in some cases. \footnote{The original implementation would store the last 200 or so steps of the computation, recomputing anything older than that on demand. The heuristic was that this was unnecessary most of the time. This is hardly useful if we want precise bounds on the amount of memory a Pixy program might use or how long it will take.}
+    This requires a heavily asynchronous mindset for which Lucid is a good starting point, since almost everything in Lucid is indeed asynchronous. It also requires avoiding the original Lucid implementation's reliance on indexed streams, since they worked based on a heuristic \cite[pages 67-68]{wadgeashcroft85} that would induce arbitrary recomputation in some cases. \footnote{The original implementation would store the last 200 or so steps of the computation, recomputing anything older than that on demand. The heuristic was that this was unnecessary most of the time. This is hardly useful if we want precise bounds on the amount of memory a Pixy program might use or how long it will take.}
     
     Our plan was to derive our own set of evaluation semantics for the language that was to become Pixy that were able to compute all the values for each timestep using bounded memory and time, and then to work on enforcing more and more correctness properties such as co-inductive deadlock-freedom and custom invariants via a temporal type system.
     
@@ -382,7 +382,7 @@ x = if y % 2 == 0
     
     \subsubsection{Delay compensation}
     
-    Often, delay compensation must be applied to the evaluation of a Pixy expression in order for it to operate correctly.
+    Often, delay compensation must be applied to the evaluation of a Pixy expression in order for it to operate correctly. \footnote{As an interesting analogy, this is quite similar to accounting for propagation delay in electronic circuit design. \cite{propwiki}}
     
     To give a brief rationale, consider the following Pixy snippet:
     
@@ -505,7 +505,7 @@ if ?x then (x+x) + next x else 1
     
     \paragraph{Next}
     
-    Since next needs to remember how many values it needs to skip in order to reach the second value yielded by $E$, we store that number. The number in question happens to be $\delta+1$, since it is one more than the time needed to wait for the first value yielded by $E$. We store the initial state of its only operand $E$.
+    Since next needs to remember how many values it needs to skip in order to reach the second value yielded by $E$, we store that number. The number in question happens to be $\delta+1$, since it is one more than the time needed to wait for the first value yielded by $E$. We also store the initial state of its only operand $E$.
     
     \begin{align*}
     \frac{
@@ -522,6 +522,8 @@ if ?x then (x+x) + next x else 1
     Fby is the only binary operator in Pixy that does not perform typical delay compensation. Since it is used for sequencing, instead we ensure that exactly one value from $A$ can be sequenced before all the values from $B$.
     
     We do this with a delay-based buffer but use a different strategy. We allocate a buffer internal to the fby expression's state that holds $\max(0, \delta_a - \delta_b +1)$ elements. This means that if the delays for $A$ and $B$ are equal, that is, they are expected to arrive at the same time, then $B$'s stream should be delayed by one timestep. If $A$ is at all earlier than $B$, then $B$ does not have to wait at all and the buffer size becomes $0$ (pass-through). If $A$ is later than $B$, $B$ should wait one more than the number of timesteps $A$ is late by, since it needs to wait for both $A$ to arrive and be yielded (which takes one extra timestep).
+    
+    We also make the first element of the state $false$ in order to initialise the latch between reading from $A$ and reding from $B$. See the evaluation rules for how this is used.
     
     \begin{align*}
     \frac{
@@ -650,11 +652,11 @@ z where
     
     Since a Pixy program's evaluation takes place over an infinite series of timesteps, the evaluation semantics describe a single timestep in detail.
     
-    The syntax of one evaluation step looks like this: $\Gamma; S \vdash E \Downarrow V; S'$.
+    The syntax of one evaluation step looks like this: $\Gamma; S \vdash E \rightarrow V; S'$. Choke-evaluation has the same syntax, except that the relation is changed from $\rightarrow$ to $\ceval$.
     
-    $\Gamma$ represents a mapping of variable names to value, that is, the current scope.
+    $\Gamma$ represents a mapping of variable names to value, that is, the current scope. When resolving conflicts we assume the right-most element will be chosen.
     
-    $S$ represents the accumulated state associated with the current expression.
+    $S$ represents the accumulated state associated with the current expression. It is important to note that the structure of state is strongly enforced: $(1, 2, 3)$ and $(1,(2, 3))$ are semantically different states, one being a tuple of three integers and the other being a 2-tuple of $1$ and $(2,3)$. Order also matters - it would be an error to initialise a state to $(1,2)$ and expect the pattern $(A, B)$ to match with $A=2, B=1$. When we pattern-match on state we rely on this property in order to avoid ambiguities and keep the states of different subexpression strictly separate.
     
     $E$ represents the current expression.
     
@@ -666,7 +668,7 @@ z where
     
     These evaluations are a key part of the formal description of choke-evaluation. If expressions are one of the few expressions whose non-choke evaluation rules initiate choke-evaluation.
     
-    Specifically, if expressions choke the non-taken branch. Otherwise, they act just like a ternary operator.
+    Specifically, if expressions choke the non-taken branch. Otherwise, they act just like a ternary operator, advancing the state of their subexpressions and correctly multiplexing values from $T$ and $F$.
     
     \begin{align*}
     \frac{
@@ -683,7 +685,7 @@ z where
     \begin{align*}
     \frac{
         \begin{matrix}
-        \Gamma; S_c \vdash C \rightarrow true; S_c' \\
+        \Gamma; S_c \vdash C \rightarrow false; S_c' \\
         \Gamma; S_t \vdash T \ceval nil; S_t' \\
         \Gamma; S_f \vdash F \rightarrow V; S_f' \\
         \end{matrix}
@@ -703,6 +705,8 @@ z where
         \Gamma; (S_c, S_t, S_f) \vdash \ifop C \thenop T \elseop F \rightarrow nil; (S_c', S_t', S_f')
     }[\text{Eval-if-nil}]
     \end{align*}
+    
+    To cover all cases, we also specify that if an if statement's conditional receives $nil$ then it chokes both its branches and yields $nil$. This is to ensure that expressions are $nil$-safe within reason. In other words, to ensure that expressions "wait" when not provided with input values by yielding $nil$ themselves.
     
     \begin{align*}
     \frac{
@@ -751,6 +755,8 @@ z where
         \item Recursively evaluating all their definitions, then their body (in that order)
         \item When choked, they only choke their body. The definitions are still evaluated as normal in order to avoid the state inside the where lagging behind the rest of the program.
     \end{enumerate}
+
+    We also ensure that we always append names to the right of $\Gamma$. This is so that when a variable is defined more than once the right-first lookup semantics will pick the most local definition.
     
     \begin{align*}
     \frac{
@@ -806,7 +812,7 @@ z where
     
     Evaluating fby has some extra requirements compared to other operators. One one hand, it operates as a latch waiting for one value from $A$ then choking $A$ and exclusively forwarding values from $B$. On the other hand, it buffers values from $B$ while waiting for the first value from $A$ as well as when dealing with its backlog of values from $B$ after it is done waiting for $A$.
     
-    Here we use $\buffer$ to represent cycling the fby's buffer $b$. The semantics of this operation are the same as when buffering identifier values - the buffer is assumed to start full of $nil$ values, and the buffer acts like a queue. As you may notice in fby-A, the expectation is that the buffer is large enough to not run out of $nil$ values before switching to fby-B. It is an error in the init stage for this not to be the case.
+    Here we use $\buffer(b, V_b) = b', V$ to represent pushing $V_b$ onto $b$ then popping $V$ from $b$, resulting in the upated queue $b'$. The semantics of this operation are the same as when buffering identifier values - the buffer is assumed to start full of $nil$ values, and the buffer acts like a queue. As you may notice in fby-A, the only correct value that can be popped from $b$ at that stage is $nil$. The expectation is that the buffer is large enough to not run out of $nil$ values before switching to fby-B. This property must be guaranteed by a correct implementation of the init stage.
     
     \begin{align*}
     \frac{
@@ -820,7 +826,9 @@ z where
     }[\text{Eval-fby-A}]
     \end{align*}
     
-    In fby-B, we continue cycling the buffer with new values from $B$. The difference here is that the buffer functions purely as a delay with constant size - the deadline for receiving a value from $A$ was the only thing requiring it to be a certain size so now we just forward whatever comes out of the buffer.
+    In fby-A you will notice that the first element of that state is pattern-matched to be $false$. This means the fby expression is still waiting for the first value from $A$. Correspondingly, the new value for that part of the state is whether a value was received from $A$, or $V_a \neq nil$. When that becomes true, that part of the state will be latched to $true$ and future evaluations will use fby-B instead.
+    
+    In fby-B, we continue cycling the buffer with new values from $B$. The difference here is that the buffer functions act purely as a delay with constant size - the deadline for receiving a value from $A$ was the only thing requiring it to be a certain size so now we just forward whatever comes out of the buffer.
     
     \begin{align*}
     \frac{
@@ -899,7 +907,7 @@ z where
     
     Identifiers are both in charge of looking up the value pointed to by $I$ and buffering it by the appropriate amount. This is so that any downstream operators receive correctly synchronised values - ensuring the buffers are the correct size is one of the main responsibilities of the init phase.
     
-    As elsewhere, $\buffer$ is a shorthand for cycling the contents of the buffer $b$ - $b$ acts as a queue that is initially full of $nil$ values, causing a delay as long as the buffer in the values yielded by this expression compared to the actual timing of the values at $\Gamma(I)$.
+    As elsewhere, $\buffer(b, V) = b', V_b$ is a shorthand for pushing $V$ onto $b$ and popping $V_b$ from the from of $b$, producing a new queue $b'$. $b$ acts as a queue that is initially full of $nil$ values, causing a delay as long as the buffer in the values yielded by this expression compared to the actual timing of the values at $\Gamma(I)$. 
     
     \begin{align*}
     \frac{
@@ -956,9 +964,51 @@ z where
         \item Whenever you hit a where clause, union together all of the maps generated by the variable
             expressions, and then create buffers for each variable in the where clause.
     \end{enumerate}
-
+- can the system afford to wait? What other components might be affected?
     It is worth noting that while the algorithm is simple in concept a lot of care needs to go into correctly calculating and combining variable delays - this algorithm is heavily context-based. That said, we have achieved decent results on our test cases with this setup.
 
+    \subsection{Test cases}
+    
+    We have a suite of runnable test cases available at (\url{https://github.com/fhackett/pixy-lang/tree/master/samples}).
+    
+    \subsubsection{Prime sieve}
+    
+    Our most complex example is a naive constant-memory implementation of Erastothenes' prime sieve:
+    
+    \begin{lstlisting}
+div(c,o) = c % o == 0 || o * o > c
+
+main() = prime where {
+    candidate =
+        5 fby (if div(candidate, odds) then
+            candidate + 2 else candidate)
+    odds =
+        3 fby (if div(candidate, odds) then 3 else odds + 2)
+    isPrime =
+        if div(candidate, odds) then
+            (candidate % odds != 0) else nil
+    prime =
+        2 fby 3 fby (if ?isPrime && isPrime then
+            candidate else nil)
+}
+    \end{lstlisting}
+    
+    Notably, while it will not always provide an answer at every timestep the algorithm will report either a result or $nil$ in constant time every step. This means that if this algorithm were used as part of a larger program it would not slow down the rest of the program's execution over time, unlike a naive imperative or functional implementation of the same program.
+    
+    \subsubsection{Running average}
+    
+    We also provide a running average calculation that exercises Pixy's stateful custom operators. For any stream consisting of numbers, $avg(n)$ will yield a correct running average at every timestep. Here we show how it can be applied to a sequence of increasing even numbers.
+    
+    \begin{lstlisting}
+avg(x) = sum/count where {
+    sum = x fby (sum + next x)
+    count = 1 fby (count + 1)
+}
+
+main() = avg(n) where {
+    n = 2 fby (n + 2)
+}
+    \end{lstlisting}
 
     \section{Comments and future work}
     
@@ -966,13 +1016,13 @@ z where
     
     \subsection{Circuits and lowest common denominator of computation}
     
-    As we worked more on the language, we discovered that Pixy is not very powerful compared to most languages. In its current form it isn't even Turing complete.
+    As we worked more on the language, we discovered that Pixy is not very powerful compared to most languages. In its current form it is unable to perform basic tasks we might expect from a general-purpose language like performing tasks that require unbounded memory or interacting with the world.
     
     While on its own this can be seen as a weakness in the language, we noticed at the same time that due to its fully static control flow Pixy can be used to describe algorithms that would work on more unusual platforms such as field programmable gate arrays - since it derives from Lucid, which had both a text and a diagram representation, and removes most of Lucid's dynamism, Pixy should be able to express algorithms targeted at the lowest common denominator of computation: digital circuits. Since we also envisage interesting implementation strategies for commodity hardware, once we build a better base for the language it may be interesting to investigate what happens if you apply Pixy to circuit design.
     
     \subsection{State of the type system(s)}
     
-    Current discussion places Pixy type system as 2-dimensional along the data and control axes. On the one hand we envisage a traditional type system similar to that used in typical functional programming languages that would be used to make sure basic data is coherent across all program timesteps, and on the other we hope to experiment with a temporal logic-based system that tries to reason about tricky corner cases and synchronisation problems that span multiple timesteps.
+    Current discussion places Pixy type system as 2-dimensional along the data and control axes. On the one hand we envisage a traditional type system similar to that used in typical functional programming languages that would be used to make sure basic data is coherent across all program timesteps, and on the other we hope to experiment with a temporal logic-based \cite{ltlwiki} system that tries to reason about tricky corner cases and synchronisation problems that span multiple timesteps.
     
     Part of our work on synchronising pre-delays might be generalisable to become a part of the temporal type system, and can already catch some basic programming errors such as leaving "gaps" in between the left and right operand of a fby.
     
@@ -997,13 +1047,25 @@ end
     
     The closest alternative we imagine is Turing-incomplete synchronous recursion, also referred to as recursive operator application earlier in this document. This would allow processing batches of data in one timestep, but using a mechanism more similar to C++'s templates. All calls would be expanded at compile time and the maximum recursion depth would be checked in order to ensure that a deadline can be given and met for the completion of each program timestep.
     
-    For truly infinite computation, the programmer would have to express it over multiple timesteps. This is reasonable, since Pixy specifically prioritises liveness and concurrency over expressiveness. It also encourages developers to think about the liveness of their systems - can the system afford to wait? What other components might be affected?
+    For truly infinite computation, the programmer would have to express it over multiple timesteps. This is reasonable, since Pixy specifically prioritises liveness and concurrency over expressiveness. It also encourages developers to think about the liveness of their systems.
     
     \subsection{Pixy's representation and treatment of numbers}
     
     In order to reason precisely about the symbolic evaluation of Pixy terms we may need to revisit and refine Pixy's model of numbers. Since we assume any value in Pixy will have a bounded size, it becomes important to define precisely how different operations interact with this size. What happens if you add 1 to the largest number a variable could represent? For sized types as described in \cite{abel} to work we also need to reason about lower bounds - what happens if you inductively subtract 2 from an unknown value? How do we deal with the possibility of reaching $1-2$ while unfolding a recursive operator application?
     
     We suspect some of these issues will be clarified by implementing our planned explicit type system, but we can also see that the subtleties of some of these numerical edge cases may in turn inform what our type system should look like.
+    
+    \section{Conclusion}
+    
+    While working on the formal description of the language and the implementation, we found that generating a formal description of a new language required a large amount of effort to go into understanding that language. We initially expected to be able to quickly describe Pixy's evaluation process then move on to devising a type system, but repeatedly discovered that we did not truly understand all of the ramifications of Pixy's semantics.
+    
+    While a naive set of dynamic semantics for dataflow languages is not that hard to produce, reasoning about exactly what values need to be buffered due to (sometimes indirect) lookaheads and what can be safely discarded proved one of the biggest challenges. Our major breakthrough in this area turned out to be separating the very hard problem of the general-purpose synchronisation of heterogenously timed streams from the more tractable problem of ensuring that each state machine was receiving values that came from the same timestep by calculating correct pre-delays.
+    
+    The other major discovery we made was choke-evaluation. We had not properly considered the issue until we ran into examples where fully evaluating a non-taken branch of an if statement would lead to an error at the same time as finding examples where skipping non-taken if branches was also incorrect. Trying to reconcile the two lead to some interesting discussions on what would be the semantically correct option, and we went through several alternatives before arriving at choke-evaluation.
+    
+    Overall, the back and forth of designing and implementing a new programming language while constantly discovering new issues with both the implementation and theory has been educational. We've gained a lot of experience in writing out a consistent formal description of a language, and we've gained a much better appreciation for what it takes to get from a basic concept to a working theory.
+    
+    Going forward we hope to follow up on the future work we identified and continue learning more about what it takes to make the general idea of Pixy work in reality.
     
     \begin{thebibliography}{9}
         \bibitem{abel}
@@ -1016,6 +1078,18 @@ end
         Ashcroft E. A.
         \textit{Lucid, the Dataflow Programming Langugage}
         Academic Press, 1985
+        \bibitem{bencina}
+        Bencina, R.
+        \textit{Real-time audio programming 101: time waits for nothing}
+        \url{http://www.rossbencina.com/code/real-time-audio-programming-101-time-waits-for-nothing}, accessed 2018/04/25
+        \bibitem{ltlwiki}
+        Wikipedia
+        \textit{Linear temporal logic}
+        \url{https://en.wikipedia.org/wiki/Linear_temporal_logic}, accessed 2018/04/25    
+        \bibitem{propwiki}
+        Wikipedia
+        Propagation delay
+        \url{https://en.wikipedia.org/wiki/Propagation_delay}, accessed 2018/04/25
     \end{thebibliography}
     
 \end{document}
