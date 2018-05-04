@@ -2,9 +2,4 @@ collatz(n) = x where {
     x = n fby (if x % 2 == 0 then x/2 else 3*x + 1)
 }
 
-main() = c where { 
-    -- start = 1 fby (if c == 1 then (start + 1) else start )
-    -- start = 1 fby (start + 1)
-    y = 8
-    c = collatz(y)
-}
+main() = collatz(9)

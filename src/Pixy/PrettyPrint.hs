@@ -9,7 +9,6 @@ import Data.List (foldl')
 import Text.PrettyPrint
 
 import Pixy.Syntax
-import Pixy.Delay
 
 class Pretty p where
     ppr :: p -> Doc

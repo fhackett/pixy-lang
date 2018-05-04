@@ -79,9 +79,6 @@ init = \case
     (Fby l r) -> FbyS False <$> init l <*> (addDepth 1 $ init r)
     (Next e) -> addDepth (-1) (init e)
     (Where body bs) -> initWhere body bs
-        -- Prevent lookups from hitting the -1 index
-        -- body' <- addDepth (bodyDelay + 1) $ init body
-        -- return $ WhereS body' bs'
     (App fname args) -> do
         f <- find (\(Function n _ _) -> n == fname) <$> asks functions
         case f of
@@ -115,7 +112,7 @@ init = \case
                 $ traverse initVar bs)
             (body', bodySize) <- 
                 listens bufferSizes 
-                $ withVarDelays (fmap (+ (-1)) vd)
+                $ withVarDelays (fmap (\d -> d - 1) vd)
                 $ init body
             let buffers = Map.unionWith max varSizes bodySize
             let definedSet = Set.fromList $ fst <$> bs
@@ -132,7 +129,6 @@ init = \case
             (e' , argBuffers) <- 
                 censor (const mempty) 
                 $ listens (Map.filterWithKey (\k _ -> k `elem` argNames) . bufferSizes) 
-                -- $ addDepth (fDepth - depth) 
                 $ withVarDelays argDelays
                 $ init e
             let argLevels = fmap (fromMaybe 0 . flip Map.lookup argBuffers) argNames
@@ -234,19 +230,6 @@ eval = \case
                 Just v -> return v
                 Nothing -> error $ "lookupValue: Tried to lookup buffer for " ++ x ++ " at index " ++ show offset ++ " with buffer size " ++ (show $ Seq.length buff)
 
-            -- let vs = (buffers s) ! x
-            -- if (currentVar s) == x 
-            --     then undefined
-            --     else undefined
-
-            -- case Map.lookup x vm of
-            --     Just (vs) -> return v
-            --     Just (_) -> error $ "lookupValue: Variable " ++ x ++ " has an empty buffer"
-            -- --     Nothing -> error $ "lookupValue: Undefined variable " ++ x
-
-        -- addIndex :: (MonadReader EvalState m) => Int -> m a -> m a
-        -- addIndex k = local (\s -> s { bufferIndex =  + (bufferIndex s) })
-
         evalBinop :: Binop -> Value -> Value -> Value
         evalBinop Plus (VInt i) (VInt j) = VInt (i + j)
         evalBinop Minus (VInt i) (VInt j) = VInt (i - j)
@@ -311,5 +294,5 @@ evalLoop fs e =
     where
         loop :: ExprS -> [Value]
         loop s =
-            let (!s', !v) = runReader (eval s) initEvalState
+            let (!s', !v) = trace (pp s) runReader (eval s) initEvalState
             in v:loop s'

@@ -1,3 +1,4 @@
-main() = y where {
-    y = 1 fby (y + 1)
+main() = x where {
+    x = y
+    y = 0 fby 1 fby x
 }
