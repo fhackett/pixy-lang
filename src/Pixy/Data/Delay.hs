@@ -128,6 +128,11 @@ type Delay = DelayEq Name Int
 toDelay :: (Integral a) => a -> Delay
 toDelay = fromInteger . toInteger
 
+getValue :: Delay -> Int
+getValue (Maximum eqs)
+    | and (fmap (Map.null . terms) eqs) = maximum $ fmap constant eqs
+    | otherwise = error "getValue: tried to get value of delay with unsolved variables."
+
 data EQ
 data GEQ
 

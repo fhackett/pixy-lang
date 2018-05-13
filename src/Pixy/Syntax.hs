@@ -80,10 +80,6 @@ data Value
     deriving (Show, Eq)
 
 
-data ParsePass
-data RenamePass
-data DelayPass
--- data PCheck
 
 data Expr p
     = Var (IdP p)
@@ -103,37 +99,47 @@ data Function p = Function
     , fnInfo :: FnP p
     }
 
-
 ud :: Void
 ud = error "Tried to evaluate void!"
 
 data DelayAnnName = DelayAnnName
-    { dname :: Name
-    , delay :: Delay
+    { danName :: Name
+    , danDelay :: Delay
+    }
+
+data BufferAnnName = BufferAnnName
+    { banName :: Name
+    , banDelay :: Delay
+    , banBufferSize :: Int
     }
 
 instance Eq DelayAnnName where
-    n1 == n2 = dname n1 == dname n2
+    n1 == n2 = danName n1 == danName n2
 
 instance Ord DelayAnnName where
-    compare n1 n2 = compare (dname n1) (dname n2)
+    compare n1 n2 = compare (danName n1) (danName n2)
+
+data ParsePass
+data RenamePass
+data DelayPass
+data TypeCheckPass
+data BufferPass
 
 type family IdP p
 type instance IdP ParsePass = Text
 type instance IdP RenamePass = Name
 type instance IdP DelayPass = DelayAnnName
+-- type instance IdP BufferPass = DelayAnnName
 
-type family FNameP p
-type instance FNameP ParsePass = Text
-type instance FNameP RenamePass = Name
-type instance FNameP DelayPass = Name
--- type instance IdP Check = Name
+type family BufferP p
+type instance IdP ParsePass = Text
+type instance IdP RenamePass = Name
+type instance IdP DelayPass = DelayAnnName
 
 type family AppP p
 type instance AppP ParsePass = [Expr ParsePass]
 type instance AppP RenamePass = [Expr RenamePass]
 type instance AppP DelayPass = [Expr DelayPass]
--- type instance AppP Check = Map Name (Expr Check)
 
 type family FnP p
 type instance FnP ParsePass = Void

@@ -19,8 +19,10 @@ import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 
 -- import Pixy.Eval
-import Pixy.Pass.DelayPass
 import Pixy.Pass.RenamePass
+import Pixy.Pass.DelayPass
+import Pixy.Pass.TypeCheckPass
+
 import Pixy.Syntax
 import Pixy.Error
 import Pixy.Parser.Parser
@@ -71,6 +73,9 @@ exec o = do
     putStrLn "--[Delays]--"
     dlFs <- hoistErr $ delayPass rnFs
     mapM_ display dlFs
+    putStrLn "--[Types]--"
+    tyFs <- hoistErr $ inferFns dlFs
+    mapM_ display tyFs
     -- c@(InferConstraints ecs cs) <- hoistErr $ genConstraints rnFs
     -- putStrLn "--[Equality Constraints]--"
     -- traverse_ (putStrLn . pp) ecs--(apply s cs)

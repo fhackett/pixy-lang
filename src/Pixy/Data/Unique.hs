@@ -1,8 +1,9 @@
 module Pixy.Data.Unique where
 
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.Writer.Strict
 import Data.Functor.Identity
 
 newtype UniqueT m a = UniqueT { unUniqueT ::  (StateT Int m a) }
@@ -14,6 +15,7 @@ newtype UniqueT m a = UniqueT { unUniqueT ::  (StateT Int m a) }
         , MonadIO
         , MonadError e
         , MonadReader r
+        , MonadWriter w
         )
 
 newtype Unique a = Unique (UniqueT Identity a)
@@ -30,6 +32,15 @@ instance (Monad m) => MonadUnique (UniqueT m) where
         i <- get
         put (i + 1)
         return $ mkUnique i
+
+instance (MonadUnique m) => MonadUnique (ExceptT e m) where
+    fresh = lift $ fresh
+
+instance (MonadUnique m) => MonadUnique (ReaderT r m) where
+    fresh = lift $ fresh
+
+instance (MonadUnique m, Monoid w) => MonadUnique (WriterT w m) where
+    fresh = lift $ fresh
 
 runUniqueT :: (Monad m) => UniqueT m a -> m a
 runUniqueT u = evalStateT (unUniqueT u) 0

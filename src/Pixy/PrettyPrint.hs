@@ -13,6 +13,7 @@ import Data.Text.Prettyprint.Doc.Render.String
 
 import Pixy.Data.Name
 import Pixy.Data.Delay
+import Pixy.Data.Type
 import Pixy.Syntax
 
 instance Pretty Value where
@@ -24,7 +25,7 @@ instance Pretty Name where
     pretty n = pretty (displayName n) <> pretty "_" <> pretty (uniqueName n)
 
 instance Pretty DelayAnnName where
-    pretty n = pretty (dname n) <> brackets (pretty $ delay n)
+    pretty n = pretty (danName n) <> brackets (pretty $ danDelay n)
 
 instance (Num a, Eq a, Pretty a, Pretty v) => Pretty (LinearEq v a) where
     pretty (LinearEq tms c) = 
@@ -39,8 +40,21 @@ instance Pretty (Constraint a) where
     pretty (x :==: y) = pretty x <+> pretty "==" <+> pretty y
     pretty (x :>=: y) = pretty x <+> pretty ">=" <+> pretty y
 
-instance Pretty (Constraints) where
+instance Pretty Constraints where
     pretty (Constraints ecs cs) = parens (hsep $ punctuate comma (fmap pretty ecs ++ fmap pretty cs))
+
+instance Pretty TVar where
+    pretty (TV x) = pretty x
+
+instance Pretty Type where
+    pretty (TVar x) = pretty x
+    pretty (TInt) = pretty "Int"
+    pretty (TBool) = pretty "Bool"
+    pretty (TNil t) = pretty "Nil" <+> pretty t
+    pretty (t1 :-> t2) = pretty t1 <+> pretty "->" <+> pretty t2
+
+instance Pretty TyScheme where
+    pretty (ForAll tvs t) = pretty "forall" <+> hsep (fmap pretty tvs) <+> dot <+> pretty t
 
 instance Pretty Binop where
     pretty Plus = pretty "+"

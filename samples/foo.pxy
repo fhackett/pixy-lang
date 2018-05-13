@@ -1,6 +1,6 @@
 foo(x) = 1 fby x
 
-main() = x where {
+main() = isEven where {
     count = 1 fby (count + 1)
-    x = foo(next count)
+    isEven = (count % 2) == 0
 }
