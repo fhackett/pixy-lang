@@ -24,7 +24,7 @@ import Pixy.Error
 import Debug.Trace
 
 data TyEnv = TyEnv
-    { varTypes :: Map Name TyScheme
+    { varTypes :: Map Name Type
     , fnTypes :: Map Name TyScheme
     }
 
@@ -50,10 +50,10 @@ lookupVar :: (MonadReader TyEnv m, MonadUnique m, MonadError TypeError m) => Nam
 lookupVar x = do
     sc <- asks ((Map.lookup x) . varTypes)
     case sc of
-        Just sc -> instantiate sc
+        Just sc -> return sc
         Nothing -> throwError $ UnboundVariable x
 
-getVars :: (MonadReader TyEnv m) => m (Map Name TyScheme)
+getVars :: (MonadReader TyEnv m) => m (Map Name Type)
 getVars = asks varTypes
 
 valueType :: (MonadUnique m) => Value -> m Type
@@ -91,12 +91,12 @@ generalizeFromEnv t = do
     vm <- asks varTypes
     return $ generalize vm t
 
-withVars :: (MonadReader TyEnv m) => Map Name TyScheme -> m a -> m a
+withVars :: (MonadReader TyEnv m) => Map Name Type -> m a -> m a
 withVars vm = local (\env -> env { varTypes = Map.union vm (varTypes env) })
 
-infer :: (MonadUnique m, MonadReader TyEnv m, MonadWriter TyInferred m, MonadError TypeError m) => Expr DelayPass -> m Type
+infer :: (MonadUnique m, MonadReader TyEnv m, MonadWriter TyInferred m, MonadError TypeError m) => Expr RenamePass -> m Type
 infer = \case
-    (Var x) -> lookupVar (danName x)
+    (Var x) -> lookupVar x
     (Const k) -> valueType k
     (If c t f) -> do
         ct <- infer c
@@ -113,12 +113,12 @@ infer = \case
     (Next e) -> infer e
     (Where body bs) -> do
         -- Make type variables for each var
-        let (bsVars, bsExprs) = unzip $ Map.toList $ Map.mapKeys danName bs
-        tvs <- traverse (const (generalizeFromEnv =<< fresh)) bsVars
+        let (bsVars, bsExprs) = unzip $ Map.toList bs
+        tvs <- traverse (const fresh) bsVars
         let bsTySchemes = Map.fromList $ zip bsVars tvs
         (bsTypes, cs) <- getConstraints $ withVars bsTySchemes $ traverse infer bsExprs
         subst <- solver cs
-        let schemes = fmap (\t -> generalize (apply subst bsTySchemes) (apply subst t)) bsTypes
+        let schemes = fmap (apply subst) bsTypes
         let bsTySchemes' = Map.fromList $ zip bsVars schemes
         withVars bsTySchemes' $ infer body
     (App fname args) -> undefined
@@ -161,16 +161,17 @@ solver = go emptySubst
             s <- unify t1 t2
             go (s <> subst) (apply s cs)
 
-inferFn :: (MonadReader TyEnv m, MonadUnique m, MonadError TypeError m) => Function DelayPass -> m TyScheme
-inferFn (Function _ args body _) = do
-    tvArgs <- traverse (const (generalizeFromEnv =<< fresh)) args
-    let argMap = Map.fromList $ zip (fmap danName args) tvArgs
+inferFn :: (MonadReader TyEnv m, MonadUnique m, MonadError TypeError m) => Function RenamePass -> m TyScheme
+inferFn (Function fname args body _) = do
+    tvArgs <- traverse (const fresh) args
+    let argMap = Map.fromList $ zip args tvArgs
     (t, cs) <- withVars argMap $ runWriterT $ infer body
     subst <- solver (tyConstraints cs)
     env <- getVars
-    return $ generalize (apply subst env) (apply subst t)
+    let fnType = foldr (:->) t tvArgs
+    return $ generalize (apply subst env) (apply subst fnType)
 
-inferFns :: [Function DelayPass] -> Either ErrorMessage [TyScheme]
+inferFns :: [Function RenamePass] -> Either ErrorMessage [TyScheme]
 inferFns fs = 
     let initEnv = TyEnv { varTypes = Map.empty, fnTypes = Map.empty }
     in first toError $ runExcept $ runUniqueT $ flip runReaderT initEnv $ traverse inferFn fs

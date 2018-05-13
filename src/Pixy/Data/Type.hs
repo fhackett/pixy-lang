@@ -20,7 +20,7 @@ newtype TVar = TV { unTyVar :: Text }
 instance Uniquable TVar where
     mkUnique n = 
         let char = ['a' .. 'z'] !! (n `mod` 26)
-        in TV $ T.pack $ replicate (n `div` 26) char
+        in TV $ T.pack $ replicate (n `div` 26 + 1) char
 
 data Type
     = TVar TVar

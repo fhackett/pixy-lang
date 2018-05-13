@@ -69,7 +69,7 @@ instance Substitutable Name Delay DelayAnnName where
 
 instance Substitutable Name Delay (Expr DelayPass) where
     apply s = \case
-        (Var x) -> Var (apply s x)
+        (Var x) -> Var x
         (Const k) -> (Const k)
         (If c t f) -> If (apply s c) (apply s t) (apply s f)
         (Next e) -> Next (apply s e)
@@ -77,17 +77,17 @@ instance Substitutable Name Delay (Expr DelayPass) where
         (Where body bs) -> 
             let bs' = Map.map (apply s) $ Map.mapKeys (apply s) bs
             in Where (apply s body) bs'
-        (App fname args) -> App (apply s fname) (fmap (apply s) args)
+        (App fname args) -> App fname (fmap (apply s) args)
         (Binop op l r) -> Binop op (apply s l) (apply s r)
         (Unary op e) -> Unary op (apply s e)
     fv = \case
-        (Var x) -> fv x
+        (Var x) -> Set.empty
         (Const k) -> Set.empty
         (If c t f) -> Set.unions [fv c, fv t, fv f]
         (Next e) -> fv e
         (Fby l r) -> Set.union (fv l) (fv r)
         (Where body bs) -> Set.unions $ (fv body):(fmap fv $ Map.elems bs)
-        (App fname args) -> Set.unions $ (fv fname):(fmap fv args)
+        (App fname args) -> Set.unions (fmap fv args)
         (Binop _ l r) -> Set.union (fv l) (fv r)
         (Unary _ e) -> fv e
 
@@ -127,7 +127,7 @@ infer = \case
     (Var x) -> do
         vd <- lookupVar x
         d <- asks (toDelay . depth)
-        withDelay vd $ Var (DelayAnnName x (d - vd - 1))
+        withDelay vd $ Var x
     (Const k) -> return $ Const k
     (If c t f) -> If <$> infer c <*> infer t <*> infer f
     (Next e) -> Next <$> (addDelay 1 $ infer e)
@@ -142,21 +142,25 @@ infer = \case
         let delays = Map.fromList $ zip vs (fmap (fromLinearEq . var) vs)
         let annVar = uncurry (zipWith DelayAnnName) $ unzip $ Map.toList delays
         -- We only want to compute the delay of the body, so we mask the rest
-        es' <- maskDelay $ withVars (fmap (1 +) delays) $ traverse whereVar $ zip vs es
+        d <- asks depth
+        es' <- maskDelay 
+            $ withVars (fmap (+ 1) delays) 
+            $ traverse whereVar 
+            $ zip vs es
         let bs' = Map.fromList $ zip annVar es'
         body' <- withVars delays $ infer body
         return $ Where body' bs'
     (App fname args) -> do
         fd <- lookupFn fname
         (annArgs, argDelays) <- unzip <$> (maskDelay $ traverse (getDelay . infer) args)
-        let argSubst = Subst $ Map.fromList $ zip (danName <$> fnArgs fd) argDelays
+        let argSubst = Subst $ Map.fromList $ zip (fnArgs fd) argDelays
         -- Apply the argument substitution to the functions constraints, and then emit them
         let fCs = fnInfo fd
         addConstraints (apply argSubst fCs)
         -- Compute the delay by applying the argument substitutions to the function delay
-        let fDelay = danDelay $ fnName fd
+        let fDelay = dAnnDelay $ fnName fd
         let fd = apply argSubst fDelay
-        withDelay fd $ App (DelayAnnName fname fd) annArgs
+        withDelay fd $ App fname annArgs
     (Binop op l r) -> Binop op <$> infer l <*> infer r
     (Unary op e) -> Unary op <$> infer e
 
@@ -262,9 +266,8 @@ functionDelay f@(Function fname args body _) = do
     let delay = apply subst (inferredDelay inferred)
     let bodyAnn = apply subst body' 
 
-    let annFname = DelayAnnName { danName = fname, danDelay = delay }
-    let argAnn = fmap (\x -> DelayAnnName x (fromLinearEq $ var x)) args
-    let delayF = (Function annFname argAnn bodyAnn cs)
+    let annFname = DelayAnnName { dAnnName = fname, dAnnDelay = delay }
+    let delayF = (Function annFname args bodyAnn cs)
     put (Map.insert fname delayF fDelays)
     return delayF
 

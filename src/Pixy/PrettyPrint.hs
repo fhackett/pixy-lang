@@ -11,6 +11,7 @@ import Data.List (foldl')
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.String
 
+import Pixy.Data.Subst
 import Pixy.Data.Name
 import Pixy.Data.Delay
 import Pixy.Data.Type
@@ -25,7 +26,10 @@ instance Pretty Name where
     pretty n = pretty (displayName n) <> pretty "_" <> pretty (uniqueName n)
 
 instance Pretty DelayAnnName where
-    pretty n = pretty (danName n) <> brackets (pretty $ danDelay n)
+    pretty n = pretty (dAnnName n) <> brackets (pretty $ dAnnDelay n)
+
+instance (Pretty v, Pretty a) => Pretty (Subst v a) where
+    pretty (Subst s) = pretty s
 
 instance (Num a, Eq a, Pretty a, Pretty v) => Pretty (LinearEq v a) where
     pretty (LinearEq tms c) = 
@@ -53,8 +57,12 @@ instance Pretty Type where
     pretty (TNil t) = pretty "Nil" <+> pretty t
     pretty (t1 :-> t2) = pretty t1 <+> pretty "->" <+> pretty t2
 
+instance Pretty TyConstraint where
+    pretty (t1 :~: t2) = pretty t1 <+> pretty "~" <+> pretty t2
+
 instance Pretty TyScheme where
-    pretty (ForAll tvs t) = pretty "forall" <+> hsep (fmap pretty tvs) <+> dot <+> pretty t
+    pretty (ForAll [] t) = pretty t
+    pretty (ForAll tvs t) = pretty "forall" <+> hsep (fmap pretty tvs) <> dot <+> pretty t
 
 instance Pretty Binop where
     pretty Plus = pretty "+"
@@ -90,7 +98,7 @@ instance Pretty (Expr ParsePass) where
     pretty (Next e) = pretty "next" <+> pretty e
     pretty (Where body bs) =
         let pbindings = fmap (\(x,e) -> pretty x <+> pretty "=" <+> pretty e) $ Map.toList bs
-        in pretty body <+> pretty "where" <+> braces (vsep pbindings)
+        in pretty body <+> pretty "where" <+> braces (nest 4 (line <> vsep pbindings) <> line)
     pretty (App fname args) =
         let pargs = punctuate comma $ fmap pretty args
         in pretty fname <> parens (hsep pargs)
@@ -110,7 +118,7 @@ instance Pretty (Expr RenamePass) where
     pretty (Next e) = pretty "next" <+> pretty e
     pretty (Where body bs) =
         let pbindings = fmap (\(x,e) -> pretty x <+> pretty "=" <+> pretty e) $ Map.toList bs
-        in pretty body <+> pretty "where" <+> braces (vsep pbindings)
+        in pretty body <+> pretty "where" <+> braces (nest 4 (line <> vsep pbindings) <> line)
     pretty (App fname args) =
         let pargs = punctuate comma $ fmap pretty args
         in pretty fname <> parens (hsep pargs)
@@ -130,7 +138,7 @@ instance Pretty (Expr DelayPass) where
     pretty (Next e) = pretty "next" <+> pretty e
     pretty (Where body bs) =
         let pbindings = fmap (\(x,e) -> pretty x <+> pretty "=" <+> pretty e) $ Map.toList bs
-        in pretty body <+> pretty "where" <+> braces (vsep pbindings)
+        in pretty body <+> pretty "where" <+> braces (nest 4 (line <> vsep pbindings) <> line)
     pretty (App fname args) =
         let pargs = punctuate comma $ fmap pretty args
         in pretty fname <> parens (hsep pargs)
