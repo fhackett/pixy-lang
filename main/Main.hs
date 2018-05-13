@@ -12,9 +12,17 @@ import Data.List (find)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 
-import Pixy.Eval
-import Pixy.Delay
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
+
+import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Render.Terminal
+
+-- import Pixy.Eval
+import Pixy.Pass.DelayPass
+import Pixy.Pass.RenamePass
 import Pixy.Syntax
+import Pixy.Error
 import Pixy.Parser.Parser
 import Pixy.PrettyPrint
 
@@ -53,35 +61,52 @@ main = exec =<< execParser opts
 
 exec :: Options -> IO ()
 exec o = do
-    contents <- readFile $ file o
-    case runParser program (file o) contents of
-        Left err -> die err
-        Right fs -> 
-            if dumpConstraints o then do
-                let cs = genConstraints fs mainF
-                putStrLn "--[Constraints]--"
-                traverse_ print cs
-                putStrLn "--[Reduced]--"
-                -- either (\e -> printErr ("Constraint Error:\n" ++ pp e ++ "\n")) (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
-            else forM_ (go $ evalLoop fs mainF) display
-    where go = case count o of
-            Just n -> take n
-            Nothing -> id
+    contents <- T.readFile $ file o
+    fs <- hoistErr $ runParser program (file o) contents
+    putStrLn "--[Parsed]--"
+    mapM_ display fs
+    rnFs <- hoistErr $ renamePass fs
+    putStrLn "--[Renamed]--"
+    mapM_ display rnFs
+    putStrLn "--[Delays]--"
+    dlFs <- hoistErr $ delayPass rnFs
+    mapM_ display dlFs
+    -- c@(InferConstraints ecs cs) <- hoistErr $ genConstraints rnFs
+    -- putStrLn "--[Equality Constraints]--"
+    -- traverse_ (putStrLn . pp) ecs--(apply s cs)
+    -- putStrLn "--[Other Constraints]--"
+    -- traverse_ (putStrLn . pp) cs--(apply s cs)
+    -- delays <- hoistErr $ solveConstraints c
+    -- putStrLn $ pp delays
 
-display :: Value ->  IO ()
--- display (Left err) = showErr err
-display (VInt k) = print k 
-display (VBool b) = print b
-display (VNil) = putStrLn "nil"
+    -- case runParser program (file o) contents of
+    --     Left err -> die err
+    --     Right fs -> 
+    --         if dumpConstraints o then do
+    --             let cs = genConstraints fs mainF
+    --             putStrLn "--[Constraints]--"
+    --             traverse_ print cs
+    --             putStrLn "--[Reduced]--"
+    --             -- either (\e -> printErr ("Constraint Error:\n" ++ pp e ++ "\n")) (mapM_ (putStrLn . pp)) $ reduce $ genConstraints fs
+    --         else forM_ (go $ evalLoop fs mainF) display
+    -- where go = case count o of
+    --         Just n -> take n
+    --         Nothing -> id
 
-mainF :: Expr
-mainF = Where (Var "main") [("main", (App "main" []))]
+display :: (Pretty a) => a -> IO ()
+display p = T.putStrLn $ renderStrict $ layoutPretty defaultLayoutOptions $ pretty p
 
-showErr :: (Show e) => e -> IO ()
-showErr err = printErr $ show err ++ "\n"
+-- mainF :: Expr Rename
+-- mainF = Where (Var "main") [("main", (App "main" []))]
+
+-- showErr :: (Show e) => e -> IO ()
+-- showErr err = printErr $ show err ++ "\n"
+
+hoistErr :: Either ErrorMessage a -> IO a
+hoistErr (Left err) = printErr err
+hoistErr (Right a) = return a
  
-printErr :: String -> IO ()
-printErr err = putStr $ prefix ++ err ++ suffix
-    where
-        prefix = setSGRCode [SetColor Foreground Vivid Red]
-        suffix = setSGRCode [Reset]
+printErr :: ErrorMessage -> IO a
+printErr err = die $ T.unpack $ renderError err
+        -- prefix = setSGRCode [SetColor Foreground Vivid Red]
+        -- suffix = setSGRCode [Reset]

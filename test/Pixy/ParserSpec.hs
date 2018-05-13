@@ -25,7 +25,7 @@ sample fname = do
         Left err -> expectationFailure err
         Right res -> do
             putStrLn "=====[Result]====="
-            mapM_ (print) res
+            mapM_ (putStrLn . pp) res
 
 isLeft :: Either e a -> Bool
 isLeft (Left _) = True

@@ -1,19 +1,19 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Pixy.Syntax where
 
 import Data.Void
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import Data.Sequence (Seq)
-import Data.STRef
 
-type Var = String
-type FName = String
+import Data.Text (Text)
 
--- data Function = Function String (Bind [Var] Expr)
-data Function = Function String [Var] Expr
-    deriving (Show)
+import Pixy.Data.Unique
+import Pixy.Data.Name
+import Pixy.Data.Delay
+
+
 data Binop
     = Plus
     | Minus
@@ -36,43 +36,108 @@ data Unary
     | Trace
     deriving (Show)
 
-data Value 
+-- data Value 
+--     = VInt !Int
+--     | VBool !Bool
+--     | VNil
+--     deriving (Show, Eq)
+
+-- data Expr
+--     = Var Var
+--     | Const Value
+--     | If Expr Expr Expr
+--     | Fby Expr Expr
+--     | Next Expr
+--     | Where Expr [(Var, Expr)]
+--     | App FName [Expr]
+--     | Binop Binop Expr Expr
+--     | Unary Unary Expr
+--     deriving (Show)
+
+-- -- AST decorated with the state needed for execution
+-- data ExprS
+--     = VarS !Var !Int
+--     | ConstS !Value
+--     | IfS !ExprS !ExprS !ExprS
+--     | FbyS !Bool !ExprS !ExprS
+--     | WhereS !ExprS !(Map Var VarInfo)
+--     | AppS !ExprS !(Map Var VarInfo)
+--     | BinopS !Binop !ExprS !ExprS
+--     | UnaryS !Unary !ExprS
+--     deriving (Show)
+
+-- data VarInfo = VarInfo 
+--     { varExpr :: ExprS
+--     , varDelay :: Int
+--     , varBuffer :: Seq Value
+--     }
+--     deriving (Show)
+
+data Value
     = VInt !Int
     | VBool !Bool
     | VNil
     deriving (Show, Eq)
 
-data Expr
-    = Var Var
+
+data ParsePass
+data RenamePass
+data DelayPass
+-- data PCheck
+
+data Expr p
+    = Var (IdP p)
     | Const Value
-    | If Expr Expr Expr
-    | Fby Expr Expr
-    | Next Expr
-    | Where Expr [(Var, Expr)]
-    | App FName [Expr]
-    | Binop Binop Expr Expr
-    | Unary Unary Expr
-    deriving (Show)
+    | If (Expr p) (Expr p) (Expr p)
+    | Fby (Expr p) (Expr p)
+    | Next (Expr p)
+    | Where (Expr p) (Map (IdP p) (Expr p))
+    | App (IdP p) (AppP p)
+    | Binop Binop (Expr p) (Expr p)
+    | Unary Unary (Expr p)
 
--- AST decorated with the state needed for execution
-data ExprS
-    = VarS !Var !Int
-    | ConstS !Value
-    | IfS !ExprS !ExprS !ExprS
-    | FbyS !Bool !ExprS !ExprS
-    | WhereS !ExprS !(Map Var VarInfo)
-    | AppS !ExprS !(Map Var VarInfo)
-    | BinopS !Binop !ExprS !ExprS
-    | UnaryS !Unary !ExprS
-    deriving (Show)
-
-data VarInfo = VarInfo 
-    { varExpr :: ExprS
-    , varDelay :: Int
-    , varBuffer :: Seq Value
+data Function p = Function
+    { fnName :: IdP p
+    , fnArgs :: [IdP p]
+    , fnBody :: Expr p
+    , fnInfo :: FnP p
     }
-    deriving (Show)
 
 
+ud :: Void
+ud = error "Tried to evaluate void!"
+
+data DelayAnnName = DelayAnnName
+    { dname :: Name
+    , delay :: Delay
+    }
+
+instance Eq DelayAnnName where
+    n1 == n2 = dname n1 == dname n2
+
+instance Ord DelayAnnName where
+    compare n1 n2 = compare (dname n1) (dname n2)
+
+type family IdP p
+type instance IdP ParsePass = Text
+type instance IdP RenamePass = Name
+type instance IdP DelayPass = DelayAnnName
+
+type family FNameP p
+type instance FNameP ParsePass = Text
+type instance FNameP RenamePass = Name
+type instance FNameP DelayPass = Name
+-- type instance IdP Check = Name
+
+type family AppP p
+type instance AppP ParsePass = [Expr ParsePass]
+type instance AppP RenamePass = [Expr RenamePass]
+type instance AppP DelayPass = [Expr DelayPass]
+-- type instance AppP Check = Map Name (Expr Check)
+
+type family FnP p
+type instance FnP ParsePass = Void
+type instance FnP RenamePass = Void
+type instance FnP DelayPass = Constraints
 
 

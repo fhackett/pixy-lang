@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Pixy.Parser.Lexer
     ( Parser
     -- , scn
@@ -20,7 +21,10 @@ import Control.Applicative ((<|>))
 import Data.Functor (void)
 import Data.Void (Void)
 
-type Parser = P.Parsec Void String
+import qualified Data.Text as T
+import Data.Text (Text)
+
+type Parser = P.Parsec Void Text
 
 lineCmt :: Parser ()
 lineCmt = L.skipLineComment "--"
@@ -42,10 +46,10 @@ sc = L.space P.space1 lineCmt blockCmt
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc
 
-symbol :: String -> Parser String
+symbol :: Text -> Parser Text
 symbol = L.symbol sc
 
-symbol' :: String -> Parser ()
+symbol' :: Text -> Parser ()
 symbol' = void . symbol
 
 integer :: Parser Integer
@@ -66,20 +70,20 @@ comma = symbol' ","
 equals :: Parser ()
 equals = symbol' "="
 
-reserved :: String -> Parser ()
+reserved :: Text -> Parser ()
 reserved s = lexeme (P.string s *> P.notFollowedBy P.alphaNumChar)
 
-identifier :: Parser String
+identifier :: Parser Text
 identifier = (lexeme . P.try) (ident >>= checkReserved)
     where
-        ident = (:) <$> P.lowerChar <*> (P.many (P.alphaNumChar <|> P.char '\''))
+        ident = (T.cons) <$> P.lowerChar <*> (T.pack <$> P.many (P.alphaNumChar <|> P.char '\''))
 
-checkReserved :: String -> Parser String
+checkReserved :: Text -> Parser Text
 checkReserved i = if i `elem` reservedWords
-                    then fail $ "reserved word " ++ i ++ " is not a valid identifier"
+                    then fail $ "reserved word " ++ (T.unpack i) ++ " is not a valid identifier"
                     else return i
 
-reservedWords :: [String]
+reservedWords :: [Text]
 reservedWords = 
     [ "nil"
     , "fby"

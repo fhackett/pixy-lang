@@ -1,4 +1,6 @@
+foo(x) = 1 fby x
+
 main() = x where {
-    x = y
-    y = 0 fby 1 fby x
+    count = 1 fby (count + 1)
+    x = foo(next count)
 }

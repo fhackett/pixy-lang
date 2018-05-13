@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Pixy.Parser.Parser
     ( program
     , expr
@@ -10,12 +11,16 @@ import qualified Text.Megaparsec as P
 import Text.Megaparsec ((<?>))
 import qualified Text.Megaparsec.Expr as P
 import qualified Text.Megaparsec.Char.Lexer as L
+import qualified Data.Map.Strict as Map
+
+import Data.Text (Text)
 
 import Pixy.Parser.Lexer
 import Pixy.Syntax
+import Pixy.Error
 
-function :: Parser Function
-function = Function <$> identifier <*> (parens (P.sepBy identifier comma)) <*> (symbol "=" *> expr)
+function :: Parser (Function ParsePass)
+function = Function <$> identifier <*> (parens (P.sepBy identifier comma)) <*> (symbol "=" *> expr) <*> pure ud
 -- function = L.nonIndented scn (Function <$> identifier <*> (parens (P.sepBy identifier comma)) <*> (symbol "=" *> expr))
 
 value :: Parser Value
@@ -26,7 +31,7 @@ value = P.choice
     , (VInt . fromIntegral) <$> integer
     ] <?> "value"
 
-term :: Parser Expr
+term :: Parser (Expr ParsePass)
 term = P.choice
     [ P.try $ App <$> identifier <*> (parens (P.sepBy expr comma))
     , Var <$> identifier
@@ -37,7 +42,7 @@ term = P.choice
     , parens expr
     ] <?> "expression"
 
-operators :: [[P.Operator Parser Expr]]
+operators :: [[P.Operator Parser (Expr ParsePass)]]
 operators =
     [ [ binary "*" (Binop Times)
       , binary "/" (Binop Divide) ]
@@ -61,25 +66,15 @@ operators =
         binary name f = P.InfixL (f <$ symbol name)
         binaryr name f = P.InfixR (f <$ symbol name)
         prefix name f = P.Prefix (f <$ symbol name)
-        _where = flip Where <$> (reserved "where" *> brackets (P.some ((,) <$> identifier <*> (symbol "=" *> expr))))
-        -- _where = L.indentBlock scn $ do
-        --     _ <- symbol "where"
-        --     return (L.IndentSome Nothing (return . flip Where) ((,) <$> identifier <*> (symbol "=" *> expr)))
+        _where = (flip Where . Map.fromList) <$> (reserved "where" *> brackets (P.some ((,) <$> identifier <*> (symbol "=" *> expr))))
 
-expr :: Parser Expr
+expr :: Parser (Expr ParsePass)
 expr = P.makeExprParser term operators
 
--- expr :: Parser Expr
--- expr = expr' >>= (\e -> _where e <|> return e)
---     where
---         _where e = L.indentBlock scn $ do
---             reserved "where"
---             return (L.IndentSome Nothing (return . Where e) ((,) <$> identifier <*> (symbol "=" *> expr)))
-
-program :: Parser [Function]
+program :: Parser [(Function ParsePass)]
 program = P.many function
 
-runParser :: Parser a -> String -> String -> Either String a
+runParser :: Parser a -> String -> Text -> Either ErrorMessage a
 runParser p f s = case P.runParser p f s of
-    Left err -> Left (P.parseErrorPretty err)
+    Left err -> Left (toError $ P.parseErrorPretty err)
     Right a -> Right a
