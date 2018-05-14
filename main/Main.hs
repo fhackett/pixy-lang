@@ -70,12 +70,12 @@ exec o = do
     rnFs <- hoistErr $ renamePass fs
     putStrLn "--[Renamed]--"
     mapM_ display rnFs
-    putStrLn "--[Delays]--"
-    dlFs <- hoistErr $ delayPass rnFs
-    mapM_ display dlFs
     putStrLn "--[Types]--"
-    tyFs <- hoistErr $ inferFns dlFs
+    tyFs <- hoistErr $ typeCheckPass rnFs
     mapM_ display tyFs
+    putStrLn "--[Delays]--"
+    dlFs <- hoistErr $ delayPass tyFs
+    mapM_ display dlFs
     -- c@(InferConstraints ecs cs) <- hoistErr $ genConstraints rnFs
     -- putStrLn "--[Equality Constraints]--"
     -- traverse_ (putStrLn . pp) ecs--(apply s cs)

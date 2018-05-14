@@ -94,7 +94,7 @@ data Expr p
     | Unary Unary (Expr p)
 
 data Function p = Function
-    { fnName :: DeclP p
+    { fnName :: IdP p
     , fnArgs :: [IdP p]
     , fnBody :: Expr p
     , fnInfo :: FnP p
@@ -105,7 +105,7 @@ ud = error "Tried to evaluate void!"
 
 data TyAnnName = TyAnnName
     { tyAnnName :: Name
-    , tyAnnType :: TyScheme
+    , tyAnnType :: Type
     }
 
 instance Eq TyAnnName where
@@ -116,20 +116,18 @@ instance Ord TyAnnName where
 
 data DelayAnnName = DelayAnnName
     { dAnnName :: Name
+    , dAnnType :: Type
     , dAnnDelay :: Delay
     }
-
--- data BufferAnnName = BufferAnnName
---     { banName :: Name
---     , banDelay :: Delay
---     , banBufferSize :: Int
---     }
 
 instance Eq DelayAnnName where
     n1 == n2 = dAnnName n1 == dAnnName n2
 
 instance Ord DelayAnnName where
     compare n1 n2 = compare (dAnnName n1) (dAnnName n2)
+
+fromTyAnnName :: TyAnnName -> Delay -> DelayAnnName
+fromTyAnnName n d = DelayAnnName { dAnnName = tyAnnName n, dAnnType = tyAnnType n, dAnnDelay = d}
 
 data ParsePass
 data RenamePass
@@ -158,7 +156,7 @@ type instance AppP DelayPass = [Expr DelayPass]
 type family FnP p
 type instance FnP ParsePass = Void
 type instance FnP RenamePass = Void
-type instance FnP TypeCheckPass = Void
-type instance FnP DelayPass = Constraints
+type instance FnP TypeCheckPass = TyScheme
+type instance FnP DelayPass = (TyScheme, Delay, Constraints)
 
 

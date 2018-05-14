@@ -25,6 +25,9 @@ instance Pretty Value where
 instance Pretty Name where
     pretty n = pretty (displayName n) <> pretty "_" <> pretty (uniqueName n)
 
+instance Pretty TyAnnName where
+    pretty n = pretty (tyAnnName n) <> pretty ":" <+> pretty (tyAnnType n)
+
 instance Pretty DelayAnnName where
     pretty n = pretty (dAnnName n) <> brackets (pretty $ dAnnDelay n)
 
@@ -129,6 +132,26 @@ instance Pretty (Function RenamePass) where
     pretty (Function fname args body _) = 
         let pargs = punctuate comma $ fmap pretty args
         in pretty fname <> parens (hsep pargs) <+> pretty "=" <+> pretty body
+
+instance Pretty (Expr TypeCheckPass) where
+    pretty (Var x) = pretty x
+    pretty (Const k) = pretty k
+    pretty (If c t f) = pretty "if" <+> pretty c <+> pretty "then" <+> pretty t <+> pretty "else" <+> pretty f
+    pretty (Fby l r) = pretty l <+> pretty "fby" <+> pretty r
+    pretty (Next e) = pretty "next" <+> pretty e
+    pretty (Where body bs) =
+        let pbindings = fmap (\(x,e) -> pretty x <+> pretty "=" <+> pretty e) $ Map.toList bs
+        in pretty body <+> pretty "where" <+> braces (nest 4 (line <> vsep pbindings) <> line)
+    pretty (App fname args) =
+        let pargs = punctuate comma $ fmap pretty args
+        in pretty fname <> parens (hsep pargs)
+    pretty (Binop op l r) = pretty l <+> pretty op <+> pretty r
+    pretty (Unary op e) = pretty op <> pretty e
+
+instance Pretty (Function TypeCheckPass) where
+    pretty (Function fname args body cs) = 
+        let pargs = punctuate comma $ fmap pretty args
+        in pretty cs <+> pretty "=>" <+> pretty fname <> parens (hsep pargs) <+> pretty "=" <+> pretty body
 
 instance Pretty (Expr DelayPass) where
     pretty (Var x) = pretty x

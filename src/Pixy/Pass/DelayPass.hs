@@ -64,8 +64,8 @@ instance Substitutable Name Delay DelayEnv where
     fv env = fv $ Map.elems (varDelays env)
 
 instance Substitutable Name Delay DelayAnnName where
-    apply s (DelayAnnName n d) = (DelayAnnName n (apply s d))
-    fv (DelayAnnName _ d) = fv d
+    apply s (DelayAnnName n t d) = (DelayAnnName n t (apply s d))
+    fv (DelayAnnName _ _ d) = fv d
 
 instance Substitutable Name Delay (Expr DelayPass) where
     apply s = \case
@@ -122,7 +122,7 @@ addDelay d = censor (\w -> w { inferredDelay = (d + inferredDelay w) })
 maskDelay :: (MonadWriter Inferred m) => m a -> m a
 maskDelay = censor (\w -> w { inferredDelay = 0 })
 
-infer :: (MonadReader DelayEnv m, MonadWriter Inferred m, MonadError DelayError m) => Expr RenamePass -> m (Expr DelayPass)
+infer :: (MonadReader DelayEnv m, MonadWriter Inferred m, MonadError DelayError m) => Expr TypeCheckPass -> m (Expr DelayPass)
 infer = \case
     (Var x) -> do
         vd <- lookupVar x
@@ -139,14 +139,16 @@ infer = \case
         return $ Fby l' r'
     (Where body bs) -> do
         let (vs, es) = (Map.keys bs, Map.elems bs)
-        let delays = Map.fromList $ zip vs (fmap (fromLinearEq . var) vs)
-        let annVar = uncurry (zipWith DelayAnnName) $ unzip $ Map.toList delays
+        let varNames = fmap tyAnnName vs
+        let annDelays = Map.fromList $ zip vs (fmap (fromLinearEq . var) varNames)
+        let annVar = uncurry (zipWith fromTyAnnName) $ unzip $ Map.toList annDelays
+        let delays = Map.mapKeys tyAnnName annDelays
         -- We only want to compute the delay of the body, so we mask the rest
         d <- asks depth
         es' <- maskDelay 
             $ withVars (fmap (+ 1) delays) 
             $ traverse whereVar 
-            $ zip vs es
+            $ zip varNames es
         let bs' = Map.fromList $ zip annVar es'
         body' <- withVars delays $ infer body
         return $ Where body' bs'
@@ -155,17 +157,16 @@ infer = \case
         (annArgs, argDelays) <- unzip <$> (maskDelay $ traverse (getDelay . infer) args)
         let argSubst = Subst $ Map.fromList $ zip (fnArgs fd) argDelays
         -- Apply the argument substitution to the functions constraints, and then emit them
-        let fCs = fnInfo fd
+        let (_, fDelay, fCs) = fnInfo fd
         addConstraints (apply argSubst fCs)
         -- Compute the delay by applying the argument substitutions to the function delay
-        let fDelay = dAnnDelay $ fnName fd
         let fd = apply argSubst fDelay
         withDelay fd $ App fname annArgs
     (Binop op l r) -> Binop op <$> infer l <*> infer r
     (Unary op e) -> Unary op <$> infer e
 
     where
-        whereVar :: (MonadReader DelayEnv m, MonadWriter Inferred m, MonadError DelayError m) => (Name, Expr RenamePass) -> m (Expr DelayPass)
+        whereVar :: (MonadReader DelayEnv m, MonadWriter Inferred m, MonadError DelayError m) => (Name, Expr TypeCheckPass) -> m (Expr DelayPass)
         whereVar (d,e) = do
             (e', ed) <- getDelay $ infer e
             addConstraint (d :==: ed)
@@ -241,10 +242,6 @@ solveLocalConstraints (Constraints ecs cs) = do
         solveEq :: (MonadError DelayError m) => LinearEq Name Int -> m Int
         solveEq (LinearEq tms c) | Map.null tms = return c
                                  | otherwise = throwError $ UnsolvedVariables (Map.keys tms)
-        -- reduce (DVar x) = throwError $ UnsolvedVariable x
-        -- reduce (DZero) = return 0
-        -- reduce (x :+: i) = (+ i) <$> reduce x
-        -- reduce (Max x y) = max <$> reduce x <*> reduce y
 
         checkConstraint :: (MonadError DelayError m) => Constraint GEQ -> m ()
         checkConstraint (x :>=: y) = do
@@ -255,8 +252,8 @@ solveLocalConstraints (Constraints ecs cs) = do
 disjoint :: (Ord a) => Set a -> Set a -> Bool
 disjoint a b = Set.null $ Set.intersection a b
 
-functionDelay :: (MonadState (Map Name (Function DelayPass)) m, MonadError DelayError m) => Function RenamePass -> m (Function DelayPass)
-functionDelay f@(Function fname args body _) = do
+functionDelay :: (MonadState (Map Name (Function DelayPass)) m, MonadError DelayError m) => Function TypeCheckPass -> m (Function DelayPass)
+functionDelay f@(Function fname args body ty) = do
     let argDelays = Map.fromList $ fmap (\x -> (x, fromLinearEq $ var x)) args
     fDelays <- get
     let inferEnv = DelayEnv { varDelays = argDelays, fnDelays = fDelays, depth = 1 }
@@ -266,10 +263,9 @@ functionDelay f@(Function fname args body _) = do
     let delay = apply subst (inferredDelay inferred)
     let bodyAnn = apply subst body' 
 
-    let annFname = DelayAnnName { dAnnName = fname, dAnnDelay = delay }
-    let delayF = (Function annFname args bodyAnn cs)
+    let delayF = (Function fname args bodyAnn (ty, delay, cs))
     put (Map.insert fname delayF fDelays)
     return delayF
 
-delayPass :: [Function RenamePass] -> Either ErrorMessage [Function DelayPass]
+delayPass :: [Function TypeCheckPass] -> Either ErrorMessage [Function DelayPass]
 delayPass fs = first toError $ evalStateT (traverse functionDelay fs) Map.empty

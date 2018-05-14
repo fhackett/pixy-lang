@@ -57,10 +57,8 @@ instantiate (ForAll tvs t) = do
     let subst = Subst $ Map.fromList $ zip tvs tvs'
     return $ apply subst t
 
-generalize :: (Substitutable TVar Type env) => env  -> Type -> TyScheme
-generalize env t = 
-    let vs = Set.toList $ fv t `Set.difference` fv env
-    in ForAll vs t
+generalize :: Type -> TyScheme
+generalize t = ForAll (Set.toList $ fv t) t
 
 data TyConstraint = Type :~: Type
 

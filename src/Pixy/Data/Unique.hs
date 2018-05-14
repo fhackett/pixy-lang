@@ -36,6 +36,9 @@ instance (Monad m) => MonadUnique (UniqueT m) where
 instance (MonadUnique m) => MonadUnique (ExceptT e m) where
     fresh = lift $ fresh
 
+instance (MonadUnique m) => MonadUnique (StateT s m) where
+    fresh = lift $ fresh
+
 instance (MonadUnique m) => MonadUnique (ReaderT r m) where
     fresh = lift $ fresh
 
